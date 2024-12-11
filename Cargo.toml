@@ -10,6 +10,10 @@ reqwest = { version = "0.12.9", features = ["blocking", "json"] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 serde = { version = "1.0.215", features = ["derive"] }
 serde_json = "1.0.133"
+sysinfo = "0.33.0"
+time = { version = "0.3.36", features = ["local-offset", "macros"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "time", "local-time"] }
+windows = { version = "0.58.0", features = ["Win32_Security", "Win32_System_Threading"] }
+windows-registry = "0.2.0"
 winreg = "0.52.0"
