@@ -333,6 +333,11 @@ fn run_service(config: &AppConfig) -> anyhow::Result<()> {
                 info!("Login pending, waiting 30 seconds");
                 std::thread::sleep(Duration::from_secs(30));
             }
+            Ok(LoginResponse::Expired(_)) => {
+                info!("Login expired");
+                save_configs(Token::default())?;
+                break;
+            }
             Ok(LoginResponse::Error(e)) => {
                 error!("Login error: {}", e);
                 std::thread::sleep(Duration::from_secs(1 * 60 * 60));
@@ -343,6 +348,8 @@ fn run_service(config: &AppConfig) -> anyhow::Result<()> {
             }
         }
     }
+
+    Ok(())
 }
 
 fn main() {
@@ -461,6 +468,7 @@ fn init_file_logs() -> anyhow::Result<()> {
 pub enum LoginResponse {
     Token(Token),
     Pending(bool),
+    Expired(bool),
     Error(String),
 }
 
