@@ -2,7 +2,7 @@ use std::{
     ffi::{OsStr, OsString},
     fs::OpenOptions,
     os::windows::process::CommandExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     sync::Arc,
     time::Duration,
@@ -39,7 +39,10 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum CliCommand {
     Install(InstallArgs),
-    Uninstall,
+    Uninstall {
+        #[arg(long, default_value_t = false)]
+        full: bool,
+    },
     Service,
 }
 
@@ -61,8 +64,19 @@ fn quote_path(path: &OsStr) -> OsString {
     path.to_os_string()
 }
 
-fn install_auto_start() -> anyhow::Result<()> {
-    let mut command = quote_path(std::env::current_exe()?.as_os_str());
+fn get_program_path() -> anyhow::Result<PathBuf> {
+    Ok(get_program_home()?.join("free-cursor-client.exe"))
+}
+
+fn install_program(target: &Path) -> anyhow::Result<()> {
+    let program = std::env::current_exe()?;
+    std::fs::copy(&program, target)?;
+    info!("Installed program to {}", target.display());
+    Ok(())
+}
+
+fn install_auto_start(program: &Path) -> anyhow::Result<()> {
+    let mut command = quote_path(program.as_os_str());
     command.push(" service");
     info!(
         "Installing auto start with command: {}",
@@ -108,10 +122,9 @@ fn uninstall_auto_start() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn stop_service() -> anyhow::Result<()> {
+fn stop_service(program: &Path) -> anyhow::Result<()> {
     info!("Stopping service");
 
-    let exe_path = std::env::current_exe()?;
     let self_pid = std::process::id();
 
     let mut sys = sysinfo::System::new_with_specifics(
@@ -120,7 +133,7 @@ fn stop_service() -> anyhow::Result<()> {
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
     let processes = sys.processes();
     for (pid, process) in processes {
-        if process.exe() == Some(exe_path.as_path()) && pid.as_u32() != self_pid {
+        if process.exe() == Some(program) && pid.as_u32() != self_pid {
             info!("Stopping process: {}", pid.as_u32());
             process.kill();
         }
@@ -188,20 +201,30 @@ fn main_result() -> anyhow::Result<()> {
             let mut config = AppConfig::load_or_default();
             config.token = Some(args.token);
             config.save()?;
-            install_auto_start()?;
 
-            stop_service()?;
+            let program = get_program_path()?;
+            stop_service(&program)?;
+
+            create_program_home()?;
+            install_program(&program)?;
+            install_auto_start(&program)?;
 
             info!("Starting service");
-            Command::new(std::env::current_exe()?)
+            Command::new(program)
                 .arg("service")
                 .creation_flags(DETACHED_PROCESS.0)
                 .spawn()?;
         }
-        CliCommand::Uninstall => {
+        CliCommand::Uninstall { full } => {
             tracing_subscriber::fmt().init();
-            stop_service()?;
+            let program = get_program_path()?;
+            stop_service(&program)?;
             uninstall_auto_start()?;
+            if full {
+                delete_program_home()?;
+            } else {
+                delete_program()?;
+            }
         }
         CliCommand::Service => {
             init_file_logs()?;
@@ -289,8 +312,8 @@ impl AppConfig {
     fn load_or_default() -> Self {
         match Self::load() {
             Ok(config) => config,
-            Err(err) => {
-                error!("Error loading config, using default: {}", err);
+            Err(_) => {
+                info!("No config found, using default");
                 Self::default()
             }
         }
@@ -305,12 +328,40 @@ impl AppConfig {
     }
 }
 
-pub fn init_file_logs() -> anyhow::Result<()> {
+fn get_program_home() -> anyhow::Result<PathBuf> {
     let app_data_dir = std::env::var("APPDATA").or_else(|_| std::env::var("HOME"))?;
     let app_home = std::path::Path::new(&app_data_dir).join("free-cursor-client");
+    Ok(app_home)
+}
+
+fn create_program_home() -> anyhow::Result<PathBuf> {
+    let app_home = get_program_home()?;
     if !app_home.exists() {
         std::fs::create_dir_all(&app_home)?;
     }
+    Ok(app_home)
+}
+
+fn delete_program_home() -> anyhow::Result<()> {
+    let app_home = get_program_home()?;
+    if app_home.exists() {
+        std::fs::remove_dir_all(&app_home)?;
+        info!("Deleted program home");
+    }
+    Ok(())
+}
+
+fn delete_program() -> anyhow::Result<()> {
+    let program = get_program_path()?;
+    if program.exists() {
+        std::fs::remove_file(&program)?;
+        info!("Deleted program");
+    }
+    Ok(())
+}
+
+fn init_file_logs() -> anyhow::Result<()> {
+    let app_home = create_program_home()?;
 
     let logs_dir = app_home.join("logs");
     if !logs_dir.exists() {
