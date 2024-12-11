@@ -348,7 +348,7 @@ fn run_service(config: &AppConfig) -> anyhow::Result<()> {
             }
             Err(e) => {
                 error!("Login error: {}", e);
-                std::thread::sleep(Duration::from_secs(1 * 60 * 60));
+                std::thread::sleep(Duration::from_secs(30));
             }
         }
     }
@@ -463,6 +463,7 @@ fn init_file_logs() -> anyhow::Result<()> {
         .with_filter(env_filter);
 
     tracing::subscriber::set_global_default(Registry::default().with(file_log))?;
+    info!("Initialized file logs");
 
     Ok(())
 }
