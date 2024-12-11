@@ -322,8 +322,12 @@ fn run_service(config: &AppConfig) -> anyhow::Result<()> {
     const MUTEX_NAME: PCWSTR = w!("free-cursor-client-service");
     let _guard = Mutex::new(MUTEX_NAME)?;
 
+    let Some(token) = config.token.as_ref() else {
+        return Err(anyhow::anyhow!("No token found"));
+    };
+
     loop {
-        let response = call_login_api(&config.token.as_ref().unwrap());
+        let response = call_login_api(token);
         match response {
             Ok(LoginResponse::Token(token)) => {
                 save_configs(token)?;
@@ -354,7 +358,7 @@ fn run_service(config: &AppConfig) -> anyhow::Result<()> {
 
 fn main() {
     if let Err(e) = main_result() {
-        error!("Error: {}", e);
+        error!("Exit with error: {}", e);
     }
 }
 
