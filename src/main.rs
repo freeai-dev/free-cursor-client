@@ -38,16 +38,30 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum CliCommand {
+    #[command(
+        about = "Install the program\nThe program will be installed to %APPDATA%/free-cursor-client, and will be started automatically"
+    )]
     Install(InstallArgs),
+
+    #[command(
+        about = "Uninstall the program\nDefault only deletes the program executable, use --full to also delete configs and logs"
+    )]
     Uninstall {
-        #[arg(long, default_value_t = false)]
+        #[arg(
+            long,
+            default_value_t = false,
+            help = "Delete all program data, including configs and logs"
+        )]
         full: bool,
     },
+
+    #[command(about = "Run the service\nDO NOT USE THIS COMMAND MANUALLY")]
     Service,
 }
 
 #[derive(Debug, Args)]
 struct InstallArgs {
+    #[arg(long, help = "The token to use")]
     token: String,
 }
 
