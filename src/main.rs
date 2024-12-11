@@ -155,7 +155,10 @@ fn save_configs(token: Token) -> anyhow::Result<()> {
     let conn = rusqlite::Connection::open(&db_path)?;
     info!("Updating auth info in {}", db_path.display());
 
-    let mut stmt = conn.prepare("UPDATE ItemTable SET value = ? WHERE key = ?")?;
+    let mut stmt = conn.prepare(
+        "INSERT INTO ItemTable (key, value) VALUES (?, ?) 
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    )?;
 
     let configs = [
         ("cursorAuth/accessToken", token.access_token),
@@ -166,8 +169,8 @@ fn save_configs(token: Token) -> anyhow::Result<()> {
     ];
 
     for (key, value) in configs {
-        info!("Updating {} with {}", key, value);
-        stmt.execute([&value, key])?;
+        info!("Upserting {} with {}", key, value);
+        stmt.execute([key, &value])?;
     }
 
     info!("Saved configs");
