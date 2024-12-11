@@ -10,6 +10,7 @@ use std::{
 
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
+use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sysinfo::ProcessRefreshKind;
@@ -57,6 +58,11 @@ enum CliCommand {
 
     #[command(about = "Run the service\nDO NOT USE THIS COMMAND MANUALLY")]
     Service,
+
+    #[command(
+        about = "Regenerate machine ID. Please close all Cursor Editor windows before running this command"
+    )]
+    Reset,
 }
 
 #[derive(Debug, Args)]
@@ -205,6 +211,43 @@ fn save_configs(token: Token) -> anyhow::Result<()> {
     Ok(())
 }
 
+// ref: https://github.com/bestK/cursor-fake-machine/blob/4df22912b8e6774faa1828d8d530c04e3fe0a79a/extension.js#L69
+fn generate_random_machine_id() -> String {
+    let template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx";
+    let mut rng = rand::thread_rng();
+    let result = template
+        .chars()
+        .map(|c| match c {
+            'x' | 'y' => {
+                let r = rng.gen::<u8>();
+                let v = if c == 'x' { r } else { (r & 0x3) | 0x8 };
+                format!("{:x}", v)
+            }
+            _ => c.to_string(),
+        })
+        .collect();
+    result
+}
+
+// ref: https://github.com/bestK/cursor-fake-machine/blob/4df22912b8e6774faa1828d8d530c04e3fe0a79a/extension.js#L36
+fn reset_machine_id() -> anyhow::Result<()> {
+    let user_config_dir = std::env::var("APPDATA").or_else(|_| std::env::var("HOME"))?;
+    let storage_path =
+        std::path::Path::new(&user_config_dir).join(r"Cursor\User\globalStorage\storage.json");
+    let storage = std::fs::read_to_string(&storage_path)?;
+    let mut storage: serde_json::Value = serde_json::from_str(&storage)?;
+
+    let new_machine_id = generate_random_machine_id();
+    if let Some(obj) = storage.get_mut("telemetry.macMachineId") {
+        *obj = serde_json::Value::from(new_machine_id.clone());
+    }
+    std::fs::write(storage_path, serde_json::to_string(&storage)?)?;
+
+    info!("Regenerated machine ID: {}", new_machine_id);
+
+    Ok(())
+}
+
 fn main_result() -> anyhow::Result<()> {
     let args = Cli::parse();
 
@@ -245,6 +288,10 @@ fn main_result() -> anyhow::Result<()> {
 
             let config = AppConfig::load_or_default();
             run_service(&config)?;
+        }
+        CliCommand::Reset => {
+            tracing_subscriber::fmt().init();
+            reset_machine_id()?;
         }
     }
 
