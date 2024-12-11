@@ -164,8 +164,8 @@ fn stop_service(program: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn call_login_api(token: &str) -> anyhow::Result<LoginResponse> {
-    let client = reqwest::blocking::ClientBuilder::new()
+async fn call_login_api(token: &str) -> anyhow::Result<LoginResponse> {
+    let client = reqwest::ClientBuilder::new()
         .timeout(Duration::from_secs(60 * 3))
         .build()?;
     let response: LoginResponse = client
@@ -173,8 +173,10 @@ fn call_login_api(token: &str) -> anyhow::Result<LoginResponse> {
         .json(&json!({
             "token": token
         }))
-        .send()?
-        .json()?;
+        .send()
+        .await?
+        .json()
+        .await?;
     info!("Login response: {:?}", response);
     Ok(response)
 }
@@ -248,7 +250,7 @@ fn reset_machine_id() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn main_result() -> anyhow::Result<()> {
+async fn main_result() -> anyhow::Result<()> {
     let args = Cli::parse();
 
     match args.command {
@@ -287,7 +289,7 @@ fn main_result() -> anyhow::Result<()> {
             init_file_logs()?;
 
             let config = AppConfig::load_or_default();
-            run_service(&config)?;
+            run_service(&config).await?;
         }
         CliCommand::Reset => {
             tracing_subscriber::fmt().init();
@@ -318,7 +320,7 @@ impl Mutex {
     }
 }
 
-fn run_service(config: &AppConfig) -> anyhow::Result<()> {
+async fn run_service(config: &AppConfig) -> anyhow::Result<()> {
     const MUTEX_NAME: PCWSTR = w!("free-cursor-client-service");
     let _guard = Mutex::new(MUTEX_NAME)?;
 
@@ -327,7 +329,7 @@ fn run_service(config: &AppConfig) -> anyhow::Result<()> {
     };
 
     loop {
-        let response = call_login_api(token);
+        let response = call_login_api(token).await;
         match response {
             Ok(LoginResponse::Token(token)) => {
                 save_configs(token)?;
@@ -356,8 +358,9 @@ fn run_service(config: &AppConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn main() {
-    if let Err(e) = main_result() {
+#[tokio::main]
+async fn main() {
+    if let Err(e) = main_result().await {
         error!("Exit with error: {}", e);
     }
 }
