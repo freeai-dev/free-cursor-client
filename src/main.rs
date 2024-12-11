@@ -20,9 +20,11 @@ use tracing_subscriber::{
     fmt::time::LocalTime, layer::SubscriberExt as _, EnvFilter, Layer as _, Registry,
 };
 use windows::{
-    core::{w, HSTRING, PCWSTR},
+    core::{w, HRESULT, HSTRING, PCWSTR},
     Win32::{
-        Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
+        Foundation::{
+            CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, ERROR_FILE_NOT_FOUND, HANDLE,
+        },
         System::Threading::{CreateMutexW, DETACHED_PROCESS},
     },
 };
@@ -60,14 +62,17 @@ fn quote_path(path: &OsStr) -> OsString {
 }
 
 fn install_auto_start() -> anyhow::Result<()> {
-    let mut path = quote_path(std::env::current_exe()?.as_os_str());
-    path.push(" ");
-    path.push(" service");
+    let mut command = quote_path(std::env::current_exe()?.as_os_str());
+    command.push(" service");
+    info!(
+        "Installing auto start with command: {}",
+        command.to_string_lossy()
+    );
 
     let key = CURRENT_USER
         .create("Software\\Microsoft\\Windows\\CurrentVersion\\Run")
         .context("CreateRegKey")?;
-    let value = HSTRING::from(path.as_os_str());
+    let value = HSTRING::from(command.as_os_str());
     key.set_hstring("free-cursor-client", &value)
         .context("SetRegValue")?;
 
@@ -77,8 +82,26 @@ fn install_auto_start() -> anyhow::Result<()> {
 }
 
 fn uninstall_auto_start() -> anyhow::Result<()> {
-    let key = CURRENT_USER.create("Software\\Microsoft\\Windows\\CurrentVersion\\Run")?;
-    key.remove_value("free-cursor-client")?;
+    let key = match CURRENT_USER.create("Software\\Microsoft\\Windows\\CurrentVersion\\Run") {
+        Ok(key) => key,
+        Err(e) if e.code() == HRESULT::from_win32(ERROR_FILE_NOT_FOUND.0) => {
+            info!("Registry key not found");
+            return Ok(());
+        }
+        Err(e) => {
+            return Err(anyhow::Error::from(e).context("RegOpenKey"));
+        }
+    };
+
+    match key.remove_value("free-cursor-client") {
+        Ok(_) => {}
+        Err(e) if e.code() == HRESULT::from_win32(ERROR_FILE_NOT_FOUND.0) => {
+            return Ok(());
+        }
+        Err(e) => {
+            return Err(anyhow::Error::from(e).context("RegDeleteValue"));
+        }
+    }
 
     info!("Uninstalled auto start");
 
@@ -86,6 +109,8 @@ fn uninstall_auto_start() -> anyhow::Result<()> {
 }
 
 fn stop_service() -> anyhow::Result<()> {
+    info!("Stopping service");
+
     let exe_path = std::env::current_exe()?;
     let self_pid = std::process::id();
 
@@ -162,6 +187,8 @@ fn main_result() -> anyhow::Result<()> {
             config.save()?;
             install_auto_start()?;
 
+            stop_service()?;
+
             info!("Starting service");
             Command::new(std::env::current_exe()?)
                 .arg("service")
@@ -170,8 +197,8 @@ fn main_result() -> anyhow::Result<()> {
         }
         CliCommand::Uninstall => {
             tracing_subscriber::fmt().init();
-            uninstall_auto_start()?;
             stop_service()?;
+            uninstall_auto_start()?;
         }
         CliCommand::Service => {
             init_file_logs()?;
@@ -184,13 +211,29 @@ fn main_result() -> anyhow::Result<()> {
     Ok(())
 }
 
+struct Mutex {
+    handle: HANDLE,
+}
+
+impl Drop for Mutex {
+    fn drop(&mut self) {
+        let _ = unsafe { CloseHandle(self.handle) };
+    }
+}
+
+impl Mutex {
+    fn new(name: PCWSTR) -> anyhow::Result<Self> {
+        let handle = unsafe { CreateMutexW(None, false, name) }?;
+        if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+            return Err(anyhow::anyhow!("Mutex already exists"));
+        }
+        Ok(Self { handle })
+    }
+}
+
 fn run_service(config: &AppConfig) -> anyhow::Result<()> {
     const MUTEX_NAME: PCWSTR = w!("free-cursor-client-service");
-    let mutex = unsafe { CreateMutexW(None, false, MUTEX_NAME) }?;
-    if !mutex.is_invalid() && unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
-        error!("Mutex already exists");
-        return Ok(());
-    }
+    let _guard = Mutex::new(MUTEX_NAME)?;
 
     loop {
         let response = call_login_api(&config.token.as_ref().unwrap());
