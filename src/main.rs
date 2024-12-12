@@ -1,3 +1,5 @@
+mod telemetry;
+
 use std::{
     ffi::{OsStr, OsString},
     fs::OpenOptions,
@@ -14,6 +16,7 @@ use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sysinfo::ProcessRefreshKind;
+use telemetry::{report, TelemetryLogLevel};
 use time::{macros::format_description, OffsetDateTime};
 use tracing::level_filters::LevelFilter;
 use tracing::{error, info};
@@ -181,24 +184,41 @@ async fn call_login_api(token: &str) -> anyhow::Result<LoginResponse> {
     Ok(response)
 }
 
-fn save_configs(token: Token) -> anyhow::Result<()> {
+async fn save_configs(token: Token) -> anyhow::Result<()> {
     let user_config_dir = std::env::var("APPDATA").or_else(|_| std::env::var("HOME"))?;
-    let db_path =
-        std::path::Path::new(&user_config_dir).join("Cursor/User/globalStorage/state.vscdb");
+    let cursor_dir = std::path::Path::new(&user_config_dir).join("Cursor");
+    let db_path = cursor_dir.join("User/globalStorage/state.vscdb");
+    if !db_path.exists() {
+        error!("Database file not found: {}", db_path.display());
+        report(
+            TelemetryLogLevel::Error,
+            None,
+            format!(
+                "Database file not found, database exists: {}, cursor dir exists: {}",
+                db_path.exists(),
+                cursor_dir.exists()
+            ),
+        )
+        .await;
+        return Err(anyhow::anyhow!(
+            "Database file not found: {}",
+            db_path.display()
+        ));
+    }
+
     info!("Opening {}", db_path.display());
-
     let conn = rusqlite::Connection::open(&db_path)?;
-    info!("Updating auth info in {}", db_path.display());
 
+    info!("Updating auth info in {}", db_path.display());
     let mut stmt = conn.prepare(
         "INSERT INTO ItemTable (key, value) VALUES (?, ?) 
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     )?;
 
     let configs = [
-        ("cursorAuth/accessToken", token.access_token),
+        ("cursorAuth/accessToken", token.access_token.clone()),
         ("cursorAuth/refreshToken", token.refresh_token),
-        ("cursorAuth/cachedEmail", token.email),
+        ("cursorAuth/cachedEmail", token.email.clone()),
         ("cursorAuth/cachedSignUpType", "Auth_0".to_string()),
         ("cursorAuth/stripeMembershipType", "free_trial".to_string()),
     ];
@@ -209,6 +229,15 @@ fn save_configs(token: Token) -> anyhow::Result<()> {
     }
 
     info!("Saved configs");
+    report(
+        TelemetryLogLevel::Info,
+        None,
+        format!(
+            "Saved access token: {}, email: {}",
+            token.access_token, token.email
+        ),
+    )
+    .await;
 
     Ok(())
 }
@@ -258,7 +287,7 @@ async fn main_result() -> anyhow::Result<()> {
             tracing_subscriber::fmt().init();
 
             let mut config = AppConfig::load_or_default();
-            config.token = Some(args.token);
+            config.token = Some(args.token.clone());
             config.save()?;
 
             let program = get_program_path()?;
@@ -273,6 +302,13 @@ async fn main_result() -> anyhow::Result<()> {
                 .arg("service")
                 .creation_flags(DETACHED_PROCESS.0)
                 .spawn()?;
+
+            report(
+                TelemetryLogLevel::Info,
+                None,
+                format!("Program installed with token: {}", args.token),
+            )
+            .await;
         }
         CliCommand::Uninstall { full } => {
             tracing_subscriber::fmt().init();
@@ -332,7 +368,7 @@ async fn run_service(config: &AppConfig) -> anyhow::Result<()> {
         let response = call_login_api(token).await;
         match response {
             Ok(LoginResponse::Token(token)) => {
-                save_configs(token)?;
+                save_configs(token).await?;
                 std::thread::sleep(Duration::from_secs(1 * 60 * 60));
             }
             Ok(LoginResponse::Pending(_)) => {
@@ -341,7 +377,7 @@ async fn run_service(config: &AppConfig) -> anyhow::Result<()> {
             }
             Ok(LoginResponse::Expired(_)) => {
                 info!("Login expired");
-                save_configs(Token::default())?;
+                save_configs(Token::default()).await?;
                 break;
             }
             Ok(LoginResponse::Error(e)) => {
@@ -361,7 +397,13 @@ async fn run_service(config: &AppConfig) -> anyhow::Result<()> {
 #[tokio::main]
 async fn main() {
     if let Err(e) = main_result().await {
-        error!("Exit with error: {}", e);
+        error!("Exit with error: {e:?}");
+        report(
+            TelemetryLogLevel::Error,
+            None,
+            format!("Exit with error: {e:?}"),
+        )
+        .await;
     }
 }
 
