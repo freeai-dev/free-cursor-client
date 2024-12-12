@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "free-cursor-client"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -365,6 +365,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "vc-ltl",
  "windows 0.58.0",
  "windows-registry",
  "winreg",
@@ -1642,6 +1643,12 @@ name = "valuable"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
+
+[[package]]
+name = "vc-ltl"
+version = "5.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04908d7cc87be06ead9048544f86c88d0806ef7f4ae6433884ed1405af866f93"
 
 [[package]]
 name = "vcpkg"
