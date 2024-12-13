@@ -1,7 +1,7 @@
 use serde::Serialize;
 use tracing::warn;
 
-use crate::AppConfig;
+use crate::config::AppConfig;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
