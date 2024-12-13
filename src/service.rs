@@ -1,3 +1,5 @@
+pub mod order;
+
 use anyhow::{Context, Result};
 use colored::Colorize;
 use std::os::windows::process::CommandExt;
@@ -17,7 +19,7 @@ use windows_registry::CURRENT_USER;
 
 use crate::{
     api::{call_login_api, call_status_api},
-    cli::{InstallArgs, StatusArgs},
+    cli::{InstallArgs, InviteArgs, StatusArgs},
     config::{self, AppConfig},
     logger,
     models::{LoginResponse, Token},
@@ -26,9 +28,12 @@ use crate::{
 
 pub async fn handle_install(args: InstallArgs) -> Result<()> {
     tracing_subscriber::fmt().init();
+    do_install(args.token).await
+}
 
+pub async fn do_install(token: String) -> Result<()> {
     let mut config = AppConfig::load_or_default();
-    config.token = Some(args.token.clone());
+    config.token = Some(token.clone());
     config.save()?;
 
     check_cursor_installed()?;
@@ -51,7 +56,7 @@ pub async fn handle_install(args: InstallArgs) -> Result<()> {
     telemetry::report(
         TelemetryLogLevel::Info,
         None,
-        format!("Program installed with token: {}", args.token),
+        format!("Program installed with token: {}", token),
     )
     .await;
 
@@ -155,6 +160,42 @@ pub async fn handle_status(args: StatusArgs) -> Result<()> {
             info!("No token found");
         }
     }
+    Ok(())
+}
+
+pub async fn handle_invite(args: InviteArgs) -> Result<()> {
+    tracing_subscriber::fmt().init();
+    let client = reqwest::Client::new();
+
+    let token = match args.token.or_else(|| AppConfig::load_or_default().token) {
+        Some(token) => token,
+        None => {
+            error!("No token found");
+            return Ok(());
+        }
+    };
+
+    let response = client
+        .post("https://auth-server.freeai.dev/api/v1/promotions")
+        .json(&serde_json::json!({
+            "token": token
+        }))
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        error!("Failed to generate invitation code");
+        return Ok(());
+    }
+
+    let promotion: serde_json::Value = response.json().await?;
+    if let Some(code) = promotion.get("promotion").and_then(|p| p.get("code")) {
+        info!(
+            "Your invitation code is: {}",
+            code.as_str().unwrap_or_default().green().bold()
+        );
+    }
+
     Ok(())
 }
 

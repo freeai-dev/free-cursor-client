@@ -30,6 +30,12 @@ pub enum CliCommand {
 
     #[command(about = "Get the status of your token")]
     Status(StatusArgs),
+
+    #[command(about = "Generate an invitation code")]
+    Invite(InviteArgs),
+
+    #[command(about = "Order a new cursor")]
+    Order,
 }
 
 #[derive(Debug, Args)]
@@ -40,6 +46,15 @@ pub struct InstallArgs {
 
 #[derive(Debug, Args)]
 pub struct StatusArgs {
+    #[arg(
+        long,
+        help = "The token to use. The cached token will be used if not provided"
+    )]
+    pub token: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct InviteArgs {
     #[arg(
         long,
         help = "The token to use. The cached token will be used if not provided"

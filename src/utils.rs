@@ -13,4 +13,4 @@ pub fn attach_console() -> Result<()> {
         });
     }
     Ok(())
-} 
+}

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Deserializer, Serialize};
+use std::fmt;
 use time::OffsetDateTime;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -61,4 +62,76 @@ pub struct Token {
     pub refresh_token: String,
     pub refresh_token_expired_at: String,
     pub machine_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageResponse {
+    pub packages: Vec<Package>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Package {
+    pub id: i64,
+    pub name: String,
+    pub price: f64,
+    pub duration: PackageDuration,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderResponse {
+    pub order: Order,
+    pub token: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Order {
+    pub id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderStatus {
+    Pending,
+    Completed,
+    Cancelled,
+}
+
+impl fmt::Display for OrderStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OrderStatus::Pending => write!(f, "Pending"),
+            OrderStatus::Completed => write!(f, "Completed"),
+            OrderStatus::Cancelled => write!(f, "Cancelled"),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageDuration {
+    Monthly,
+    Quarterly,
+    SemiAnnual,
+    Annual,
+}
+
+impl fmt::Display for PackageDuration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PackageDuration::Monthly => write!(f, "Monthly"),
+            PackageDuration::Quarterly => write!(f, "Quarterly"),
+            PackageDuration::SemiAnnual => write!(f, "Semi-Annual"),
+            PackageDuration::Annual => write!(f, "Annual"),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentUrlResponse {
+    pub url: String,
 }

@@ -45,6 +45,8 @@ async fn main_result() -> Result<()> {
         CliCommand::Uninstall { full } => service::handle_uninstall(full).await?,
         CliCommand::Service => service::run_service().await?,
         CliCommand::Status(args) => service::handle_status(args).await?,
+        CliCommand::Invite(args) => service::handle_invite(args).await?,
+        CliCommand::Order => service::order::handle_order().await?,
     }
 
     Ok(())
