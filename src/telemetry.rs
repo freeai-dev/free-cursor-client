@@ -11,6 +11,7 @@ struct TelemetryLog {
     os: String,
     version: String,
     machine_id: String,
+    build: String,
     level: TelemetryLogLevel,
 }
 
@@ -41,15 +42,19 @@ pub(crate) async fn report(level: TelemetryLogLevel, token: Option<String>, mess
         .or_else(|| AppConfig::load_or_default().token)
         .unwrap_or_default();
 
-    let os = std::env::consts::OS;
+    let os_type = os_info::get().os_type().to_string();
+    let os_version = os_info::get().version().to_string();
+    let os = format!("{os_type} {os_version}");
     let version = env!("CARGO_PKG_VERSION");
     let machine_id = machine_uid::get().unwrap_or_else(|err| format!("GetMachineIdError: {err:?}"));
+    let build = env!("BUILD_ID");
     let log = TelemetryLog {
         token,
         log: message,
-        os: os.to_string(),
+        os,
         version: version.to_string(),
         machine_id: machine_id.to_string(),
+        build: build.to_string(),
         level,
     };
 
