@@ -1,5 +1,7 @@
 # Free Cursor Client
 
+[English](./README.md) | [中文](./README_zh.md)
+
 Free Cursor Client is a tool for managing Free Cursor accounts.
 
 ## Usage
