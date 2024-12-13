@@ -33,19 +33,7 @@ pub async fn handle_install(args: InstallArgs) -> Result<()> {
 
     check_cursor_installed()?;
 
-    let response = call_login_api(&args.token).await?;
-    match response {
-        LoginResponse::Token(token) => {
-            wait_cursor_processes()?;
-            save_configs(token).await?;
-        }
-        LoginResponse::Expired(_) => {
-            info!("Subscription expired, please renew your subscription");
-            return Err(anyhow::anyhow!("Subscription expired"));
-        }
-        LoginResponse::Error(e) => warn!("Login error: {}", e),
-        LoginResponse::Pending(_) => {}
-    }
+    wait_cursor_processes()?;
 
     let program = get_program_path()?;
     stop_service(&program)?;
@@ -345,10 +333,11 @@ fn wait_cursor_processes() -> Result<()> {
             return Ok(());
         }
         if !tips {
-            info!("Waiting for Cursor to stop...");
+            info!("Found running Cursor processes:");
             for p in processes {
                 info!("  PID: {}", p);
             }
+            info!("Please close all Cursor processes before continuing...");
             tips = true;
         }
         std::thread::sleep(Duration::from_millis(300));
@@ -363,12 +352,7 @@ fn scan_cursor_processes() -> Result<Vec<u32>> {
     let processes = sys.processes();
     let cursor_processes = processes
         .iter()
-        .filter(|(_, process)| {
-            process
-                .exe()
-                .map(|exe| exe.to_string_lossy().eq_ignore_ascii_case("Cursor.exe"))
-                .unwrap_or(false)
-        })
+        .filter(|(_, process)| process.name().eq_ignore_ascii_case("Cursor.exe"))
         .map(|(pid, _)| pid.as_u32())
         .collect();
     Ok(cursor_processes)
