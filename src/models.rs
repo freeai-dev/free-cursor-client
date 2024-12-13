@@ -61,7 +61,7 @@ pub struct Token {
     pub access_token_expired_at: String,
     pub refresh_token: String,
     pub refresh_token_expired_at: String,
-    pub machine_id: String,
+    pub machine_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

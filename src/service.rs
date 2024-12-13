@@ -216,7 +216,9 @@ fn get_cursor_installed_dir() -> Result<PathBuf> {
 }
 
 async fn save_configs(token: Token) -> Result<()> {
-    reset_machine_id(&token.machine_id)?;
+    if let Some(machine_id) = token.machine_id {
+        reset_machine_id(&machine_id)?;
+    }
 
     let cursor_dir = get_cursor_installed_dir()?;
     let db_path = cursor_dir.join("User/globalStorage/state.vscdb");
