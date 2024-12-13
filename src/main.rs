@@ -14,12 +14,15 @@ use std::{
 
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
+use colored::Colorize as _;
 use rand::Rng as _;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 use sysinfo::ProcessRefreshKind;
 use telemetry::{report, TelemetryLogLevel};
-use time::{macros::format_description, OffsetDateTime};
+use time::{
+    format_description::well_known::Rfc3339, macros::format_description, OffsetDateTime, UtcOffset,
+};
 use tracing::level_filters::LevelFilter;
 use tracing::{error, info};
 use tracing_subscriber::{
@@ -71,12 +74,24 @@ enum CliCommand {
         about = "Regenerate machine ID. Please close all Cursor Editor windows before running this command"
     )]
     Reset,
+
+    #[command(about = "Get the status of your token")]
+    Status(StatusArgs),
 }
 
 #[derive(Debug, Args)]
 struct InstallArgs {
     #[arg(long, help = "The token to use")]
     token: String,
+}
+
+#[derive(Debug, Args)]
+struct StatusArgs {
+    #[arg(
+        long,
+        help = "The token to use. The cached token will be used if not provided"
+    )]
+    token: Option<String>,
 }
 
 fn quote_path(path: &OsStr) -> OsString {
@@ -170,6 +185,21 @@ fn stop_service(program: &Path) -> anyhow::Result<()> {
     info!("Stopped service");
 
     Ok(())
+}
+
+async fn call_status_api(token: &str) -> anyhow::Result<StatusResponse> {
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(60 * 3))
+        .build()?;
+    let response: StatusResponse = client
+        .get(format!(
+            "https://auth-server.freeai.dev/api/v1/cursor/token/{token}"
+        ))
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(response)
 }
 
 async fn call_login_api(token: &str) -> anyhow::Result<LoginResponse> {
@@ -358,6 +388,34 @@ async fn main_result() -> anyhow::Result<()> {
             tracing_subscriber::fmt().init();
             reset_machine_id()?;
         }
+        CliCommand::Status(args) => {
+            tracing_subscriber::fmt().init();
+            let config = AppConfig::load_or_default();
+            let token = args.token.or(config.token);
+            match token {
+                Some(token) => {
+                    let response = call_status_api(&token).await?;
+                    if response.subscriptions.is_empty() {
+                        info!("You have {} subscriptions", "NO".red().bold());
+                    } else {
+                        info!("Your subscriptions:");
+                        for subscription in response.subscriptions {
+                            let status = match subscription.status {
+                                UserSubscriptionStatus::Active => "Active".green().bold(),
+                                UserSubscriptionStatus::Expired => "Expired".red().bold(),
+                                UserSubscriptionStatus::Cancelled => "Cancelled".yellow().bold(),
+                            };
+                            info!("  Status: {}", status);
+                            info!("    Start date: {}", subscription.start_date.0);
+                            info!("    End date: {}", subscription.end_date.0);
+                        }
+                    }
+                }
+                None => {
+                    info!("No token found");
+                }
+            }
+        }
     }
 
     Ok(())
@@ -538,6 +596,40 @@ fn init_file_logs() -> anyhow::Result<()> {
     info!("Initialized file logs");
 
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusResponse {
+    pub subscriptions: Vec<UserSubscription>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rfc3339DateTime(OffsetDateTime);
+
+impl<'de> Deserialize<'de> for Rfc3339DateTime {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let local_offset = UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC);
+        let s = String::deserialize(deserializer)?;
+        let offset = OffsetDateTime::parse(&s, &Rfc3339).unwrap();
+        Ok(Self(offset.to_offset(local_offset)))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserSubscription {
+    pub status: UserSubscriptionStatus,
+    pub start_date: Rfc3339DateTime,
+    pub end_date: Rfc3339DateTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UserSubscriptionStatus {
+    Active,
+    Expired,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
