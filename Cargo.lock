@@ -366,7 +366,6 @@ dependencies = [
  "clap",
  "colored",
  "machine-uid",
- "rand",
  "reqwest",
  "rusqlite",
  "serde",
@@ -379,7 +378,6 @@ dependencies = [
  "vc-ltl",
  "windows 0.58.0",
  "windows-registry",
- "winreg",
 ]
 
 [[package]]
