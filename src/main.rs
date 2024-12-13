@@ -197,13 +197,15 @@ async fn call_status_api(token: &str) -> anyhow::Result<StatusResponse> {
 }
 
 async fn call_login_api(token: &str) -> anyhow::Result<LoginResponse> {
+    let machine_id = machine_uid::get().map_err(|_| anyhow::anyhow!("Failed to get machine id"))?;
     let client = reqwest::ClientBuilder::new()
         .timeout(Duration::from_secs(60 * 3))
         .build()?;
     let response: LoginResponse = client
         .post("https://auth-server.freeai.dev/api/v1/cursor/token")
         .json(&json!({
-            "token": token
+            "token": token,
+            "machineId": machine_id
         }))
         .send()
         .await?
