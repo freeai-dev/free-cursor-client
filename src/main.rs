@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod telemetry;
 
 use std::{
@@ -29,7 +31,10 @@ use windows::{
         Foundation::{
             CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, ERROR_FILE_NOT_FOUND, HANDLE,
         },
-        System::Threading::{CreateMutexW, DETACHED_PROCESS},
+        System::{
+            Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS},
+            Threading::{CreateMutexW, DETACHED_PROCESS},
+        },
     },
 };
 use windows_registry::CURRENT_USER;
@@ -279,8 +284,30 @@ fn reset_machine_id() -> anyhow::Result<()> {
     Ok(())
 }
 
+static CONSOLE_ATTACHED: std::sync::Once = std::sync::Once::new();
+fn attach_console() -> anyhow::Result<()> {
+    unsafe {
+        CONSOLE_ATTACHED.call_once(|| {
+            if AttachConsole(ATTACH_PARENT_PROCESS).is_err() {
+                let _ = AllocConsole();
+            }
+        });
+    }
+    Ok(())
+}
+
 async fn main_result() -> anyhow::Result<()> {
-    let args = Cli::parse();
+    let args = match Cli::try_parse() {
+        Ok(args) => args,
+        Err(e) => {
+            attach_console()?;
+            e.exit();
+        }
+    };
+
+    if !matches!(args.command, CliCommand::Service) {
+        attach_console()?;
+    }
 
     match args.command {
         CliCommand::Install(args) => {
