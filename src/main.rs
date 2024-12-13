@@ -15,7 +15,6 @@ use std::{
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
 use colored::Colorize as _;
-use rand::Rng as _;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 use sysinfo::ProcessRefreshKind;
@@ -23,8 +22,8 @@ use telemetry::{report, TelemetryLogLevel};
 use time::{
     format_description::well_known::Rfc3339, macros::format_description, OffsetDateTime, UtcOffset,
 };
-use tracing::level_filters::LevelFilter;
 use tracing::{error, info};
+use tracing::{level_filters::LevelFilter, warn};
 use tracing_subscriber::{
     fmt::time::LocalTime, layer::SubscriberExt as _, EnvFilter, Layer as _, Registry,
 };
@@ -69,11 +68,6 @@ enum CliCommand {
 
     #[command(about = "Run the service\nDO NOT USE THIS COMMAND MANUALLY")]
     Service,
-
-    #[command(
-        about = "Regenerate machine ID. Please close all Cursor Editor windows before running this command"
-    )]
-    Reset,
 
     #[command(about = "Get the status of your token")]
     Status(StatusArgs),
@@ -220,21 +214,12 @@ async fn call_login_api(token: &str) -> anyhow::Result<LoginResponse> {
 }
 
 async fn save_configs(token: Token) -> anyhow::Result<()> {
-    let user_config_dir = std::env::var("APPDATA").or_else(|_| std::env::var("HOME"))?;
-    let cursor_dir = std::path::Path::new(&user_config_dir).join("Cursor");
+    reset_machine_id(&token.machine_id)?;
+
+    let cursor_dir = get_cursor_installed_dir()?;
     let db_path = cursor_dir.join("User/globalStorage/state.vscdb");
     if !db_path.exists() {
         error!("Database file not found: {}", db_path.display());
-        report(
-            TelemetryLogLevel::Error,
-            None,
-            format!(
-                "Database file not found, database exists: {}, cursor dir exists: {}",
-                db_path.exists(),
-                cursor_dir.exists()
-            ),
-        )
-        .await;
         return Err(anyhow::anyhow!(
             "Database file not found: {}",
             db_path.display()
@@ -277,39 +262,34 @@ async fn save_configs(token: Token) -> anyhow::Result<()> {
     Ok(())
 }
 
-// ref: https://github.com/bestK/cursor-fake-machine/blob/4df22912b8e6774faa1828d8d530c04e3fe0a79a/extension.js#L69
-fn generate_random_machine_id() -> String {
-    let template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx";
-    let mut rng = rand::thread_rng();
-    let result = template
-        .chars()
-        .map(|c| match c {
-            'x' | 'y' => {
-                let r = rng.gen::<u8>();
-                let v = if c == 'x' { r } else { (r & 0x3) | 0x8 };
-                format!("{:x}", v)
-            }
-            _ => c.to_string(),
-        })
-        .collect();
-    result
+fn get_cursor_installed_dir() -> anyhow::Result<PathBuf> {
+    let user_config_dir = std::env::var("APPDATA").or_else(|_| std::env::var("HOME"))?;
+    let cursor_dir = std::path::Path::new(&user_config_dir).join("Cursor");
+    Ok(cursor_dir)
+}
+
+fn check_cursor_installed() -> anyhow::Result<()> {
+    let cursor_dir = get_cursor_installed_dir()?;
+    if !cursor_dir.exists() {
+        error!("Cursor is not installed");
+        return Err(anyhow::anyhow!("Cursor is not installed"));
+    }
+    Ok(())
 }
 
 // ref: https://github.com/bestK/cursor-fake-machine/blob/4df22912b8e6774faa1828d8d530c04e3fe0a79a/extension.js#L36
-fn reset_machine_id() -> anyhow::Result<()> {
-    let user_config_dir = std::env::var("APPDATA").or_else(|_| std::env::var("HOME"))?;
-    let storage_path =
-        std::path::Path::new(&user_config_dir).join(r"Cursor\User\globalStorage\storage.json");
+fn reset_machine_id(machine_id: &str) -> anyhow::Result<()> {
+    let cursor_dir = get_cursor_installed_dir()?;
+    let storage_path = cursor_dir.join(r"User\globalStorage\storage.json");
     let storage = std::fs::read_to_string(&storage_path)?;
     let mut storage: serde_json::Value = serde_json::from_str(&storage)?;
 
-    let new_machine_id = generate_random_machine_id();
     if let Some(obj) = storage.get_mut("telemetry.macMachineId") {
-        *obj = serde_json::Value::from(new_machine_id.clone());
+        *obj = serde_json::Value::from(machine_id);
     }
     std::fs::write(storage_path, serde_json::to_string(&storage)?)?;
 
-    info!("Regenerated machine ID: {}", new_machine_id);
+    info!("Reset machine ID: {}", machine_id);
 
     Ok(())
 }
@@ -324,6 +304,49 @@ fn attach_console() -> anyhow::Result<()> {
         });
     }
     Ok(())
+}
+
+fn scan_cursor_processes() -> anyhow::Result<Vec<u32>> {
+    let mut sys = sysinfo::System::new_with_specifics(
+        sysinfo::RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+    );
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    let processes = sys.processes();
+    let cursor_processes = processes
+        .iter()
+        .filter(|(_, process)| {
+            process
+                .exe()
+                .map(|exe| exe.to_string_lossy().eq_ignore_ascii_case("Cursor.exe"))
+                .unwrap_or(false)
+        })
+        .map(|(pid, _)| pid.as_u32())
+        .collect();
+    Ok(cursor_processes)
+}
+
+fn wait_cursor_processes() -> anyhow::Result<()> {
+    let mut tips = false;
+    loop {
+        let processes = match scan_cursor_processes() {
+            Ok(processes) => processes,
+            Err(e) => {
+                warn!("Failed to scan cursor processes: {}", e);
+                return Ok(());
+            }
+        };
+        if processes.is_empty() {
+            return Ok(());
+        }
+        if !tips {
+            info!("Waiting for Cursor to stop...");
+            for p in processes {
+                info!("  PID: {}", p);
+            }
+            tips = true;
+        }
+        std::thread::sleep(Duration::from_millis(300));
+    }
 }
 
 async fn main_result() -> anyhow::Result<()> {
@@ -346,6 +369,22 @@ async fn main_result() -> anyhow::Result<()> {
             let mut config = AppConfig::load_or_default();
             config.token = Some(args.token.clone());
             config.save()?;
+
+            check_cursor_installed()?;
+
+            let response = call_login_api(&args.token).await?;
+            match response {
+                LoginResponse::Token(token) => {
+                    wait_cursor_processes()?;
+                    save_configs(token).await?;
+                }
+                LoginResponse::Expired(_) => {
+                    info!("Subscription expired, please renew your subscription");
+                    return Err(anyhow::anyhow!("Subscription expired"));
+                }
+                LoginResponse::Error(e) => warn!("Login error: {}", e),
+                LoginResponse::Pending(_) => {}
+            }
 
             let program = get_program_path()?;
             stop_service(&program)?;
@@ -383,10 +422,6 @@ async fn main_result() -> anyhow::Result<()> {
 
             let config = AppConfig::load_or_default();
             run_service(&config).await?;
-        }
-        CliCommand::Reset => {
-            tracing_subscriber::fmt().init();
-            reset_machine_id()?;
         }
         CliCommand::Status(args) => {
             tracing_subscriber::fmt().init();
@@ -453,7 +488,18 @@ async fn run_service(config: &AppConfig) -> anyhow::Result<()> {
         let response = call_login_api(token).await;
         match response {
             Ok(LoginResponse::Token(token)) => {
-                save_configs(token).await?;
+                match save_configs(token).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("Failed to save configs: {}", e);
+                        report(
+                            TelemetryLogLevel::Error,
+                            None,
+                            format!("Failed to save configs: {}", e),
+                        )
+                        .await;
+                    }
+                }
                 std::thread::sleep(Duration::from_secs(1 * 60 * 60));
             }
             Ok(LoginResponse::Pending(_)) => {
@@ -461,7 +507,13 @@ async fn run_service(config: &AppConfig) -> anyhow::Result<()> {
                 std::thread::sleep(Duration::from_secs(30));
             }
             Ok(LoginResponse::Expired(_)) => {
-                info!("Login expired");
+                info!("Subscription expired");
+                report(
+                    TelemetryLogLevel::Info,
+                    None,
+                    format!("Subscription expired, token: {}", token),
+                )
+                .await;
                 save_configs(Token::default()).await?;
                 break;
             }
@@ -650,4 +702,5 @@ pub struct Token {
     pub access_token_expired_at: String,
     pub refresh_token: String,
     pub refresh_token_expired_at: String,
+    pub machine_id: String,
 }
