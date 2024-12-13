@@ -100,7 +100,7 @@ pub async fn run_service() -> Result<()> {
                         .await;
                     }
                 }
-                std::thread::sleep(Duration::from_secs(1 * 60 * 60));
+                std::thread::sleep(Duration::from_secs(30 * 60));
             }
             Ok(LoginResponse::Pending(_)) => {
                 info!("Login pending, waiting 30 seconds");
@@ -119,7 +119,7 @@ pub async fn run_service() -> Result<()> {
             }
             Ok(LoginResponse::Error(e)) => {
                 error!("Login error: {}", e);
-                std::thread::sleep(Duration::from_secs(1 * 60 * 60));
+                std::thread::sleep(Duration::from_secs(30 * 60));
             }
             Err(e) => {
                 error!("Login error: {}", e);
