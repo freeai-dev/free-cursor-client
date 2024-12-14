@@ -1,10 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use qrcode::{render::unicode, QrCode};
-use ratatui::{
-    style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, ListState},
-};
 
 use crate::{api::get_payment_url, models::Package};
 use crate::{
@@ -99,58 +94,36 @@ pub async fn handle_order() -> Result<()> {
 }
 
 fn select_package(packages: &[Package]) -> Result<Option<&Package>> {
-    let mut terminal = ratatui::init();
+    loop {
+        println!("\nAvailable packages:");
+        for (i, package) in packages.iter().enumerate() {
+            println!(
+                "{}. {} - ￥{} ({})",
+                i + 1,
+                package.name,
+                package.price,
+                package.duration
+            );
+        }
+        println!(
+            "\nEnter the number of your choice (1-{}) or 'q' to quit:",
+            packages.len()
+        );
 
-    let mut list_state = ListState::default();
-    list_state.select(Some(0));
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        let input = input.trim();
 
-    let selected_package = loop {
-        terminal.draw(|frame| {
-            let items: Vec<ListItem> = packages
-                .iter()
-                .map(|p| ListItem::new(format!("{} - ￥{} ({})", p.name, p.price, p.duration)))
-                .collect();
+        if input.eq_ignore_ascii_case("q") {
+            return Ok(None);
+        }
 
-            let list = List::new(items)
-                .block(
-                    Block::default()
-                        .title("Select Package (Use ↑↓ to navigate, Enter to select)")
-                        .borders(Borders::ALL),
-                )
-                .highlight_style(Style::default().bg(Color::White).fg(Color::Black));
-
-            frame.render_stateful_widget(list, frame.area(), &mut list_state);
-        })?;
-
-        if let Event::Key(key) = event::read().unwrap() {
-            if key.kind == KeyEventKind::Press {
-                match key.code {
-                    KeyCode::Up => {
-                        let i = list_state.selected().unwrap();
-                        list_state.select(Some(if i == 0 { packages.len() - 1 } else { i - 1 }));
-                    }
-                    KeyCode::Down => {
-                        let i = list_state.selected().unwrap();
-                        list_state.select(Some((i + 1) % packages.len()));
-                    }
-                    KeyCode::Enter => {
-                        break Some(&packages[list_state.selected().unwrap()]);
-                    }
-                    KeyCode::Char('q') | KeyCode::Esc => {
-                        break None;
-                    }
-                    KeyCode::Char('c') => {
-                        if key.modifiers.contains(KeyModifiers::CONTROL) {
-                            break None;
-                        }
-                    }
-                    _ => {}
-                }
+        if let Ok(choice) = input.parse::<usize>() {
+            if choice >= 1 && choice <= packages.len() {
+                return Ok(Some(&packages[choice - 1]));
             }
         }
-    };
 
-    ratatui::restore();
-
-    Ok(selected_package)
+        println!("Invalid selection. Please try again.");
+    }
 }
