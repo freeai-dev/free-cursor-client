@@ -40,8 +40,11 @@ pub enum CliCommand {
 
 #[derive(Debug, Args)]
 pub struct InstallArgs {
-    #[arg(long, help = "The token to use")]
-    pub token: String,
+    #[arg(
+        long,
+        help = "The token to use. The cached token will be used if not provided"
+    )]
+    pub token: Option<String>,
 }
 
 #[derive(Debug, Args)]

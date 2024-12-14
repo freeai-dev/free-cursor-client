@@ -28,7 +28,18 @@ use crate::{
 
 pub async fn handle_install(args: InstallArgs) -> Result<()> {
     tracing_subscriber::fmt().init();
-    do_install(args.token).await
+
+    let token = match args.token.or_else(|| AppConfig::load_or_default().token) {
+        Some(token) => token,
+        None => {
+            error!("No token provided and no token found in config");
+            return Err(anyhow::anyhow!(
+                "No token provided and no token found in config"
+            ));
+        }
+    };
+
+    do_install(token).await
 }
 
 pub async fn do_install(token: String) -> Result<()> {
