@@ -25,7 +25,7 @@ pub async fn handle_order() -> Result<()> {
         Some(token) => (None, None, Some(token)),
         None => {
             let name = loop {
-                println!("请输入您的姓名:");
+                println!("请输入您的姓名：");
                 let mut input = String::new();
                 std::io::stdin().read_line(&mut input)?;
                 let input = input.trim().to_string();
@@ -68,11 +68,8 @@ pub async fn handle_order() -> Result<()> {
     config.token = Some(order.token.clone());
     config.save()?;
 
-    println!("订单号: {}", order.order.id);
-    println!(
-        "Token: {} (Token 已自动保存到系统)",
-        order.token
-    );
+    println!("订单号：{}", order.order.id);
+    println!("Token: {} (Token 已自动保存到系统)", order.token);
 
     // Install the program before showing QR code
     crate::service::do_install(order.token).await?;
@@ -85,7 +82,7 @@ pub async fn handle_order() -> Result<()> {
         .light_color(unicode::Dense1x2::Dark)
         .build();
 
-    println!("\n请使用支付宝扫描下方二维码完成支付:");
+    println!("\n请使用支付宝扫描下方二维码完成支付：");
     println!("{}", qr_string);
     println!("\n注意：支付完成后服务可能不会立即生效。");
     println!("如需加急处理，请联系 customer@freeai.dev");
@@ -95,7 +92,7 @@ pub async fn handle_order() -> Result<()> {
 
 fn select_package(packages: &[Package]) -> Result<Option<&Package>> {
     loop {
-        println!("\n可选套餐:");
+        println!("\n可选套餐：");
         for (i, package) in packages.iter().enumerate() {
             println!(
                 "{}. {} - ￥{} ({})",
@@ -106,7 +103,7 @@ fn select_package(packages: &[Package]) -> Result<Option<&Package>> {
             );
         }
         println!(
-            "\n请输入您选择的套餐编号 (1-{}) 或输入 'q' 退出:",
+            "\n请输入您选择的套餐编号 (1-{}) 或输入 'q' 退出：",
             packages.len()
         );
 

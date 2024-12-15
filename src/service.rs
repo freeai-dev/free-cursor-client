@@ -17,10 +17,11 @@ use windows::{
 };
 use windows_registry::CURRENT_USER;
 
+use crate::config::{get_legacy_program_path, get_program_path, get_project_dirs};
 use crate::{
     api::{call_login_api, call_status_api},
     cli::{InstallArgs, InviteArgs, StatusArgs},
-    config::{self, AppConfig},
+    config::AppConfig,
     logger,
     models::{LoginResponse, Token},
     telemetry::{self, TelemetryLogLevel},
@@ -50,9 +51,8 @@ pub async fn do_install(token: String) -> Result<()> {
     wait_cursor_processes()?;
 
     let program = get_program_path()?;
-    stop_service(&program)?;
+    stop_service()?;
 
-    create_program_home()?;
     install_program(&program)?;
     install_auto_start(&program)?;
 
@@ -72,16 +72,10 @@ pub async fn do_install(token: String) -> Result<()> {
     Ok(())
 }
 
-pub async fn handle_uninstall(full: bool) -> Result<()> {
+pub async fn handle_uninstall(_full: bool) -> Result<()> {
     tracing_subscriber::fmt().init();
-    let program = get_program_path()?;
-    stop_service(&program)?;
+    stop_service()?;
     uninstall_auto_start()?;
-    if full {
-        delete_program_home()?;
-    } else {
-        delete_program()?;
-    }
     Ok(())
 }
 
@@ -100,11 +94,11 @@ pub async fn run_service() -> Result<()> {
                 match save_configs(token).await {
                     Ok(_) => {}
                     Err(e) => {
-                        error!("保存配置失败: {}", e);
+                        error!("保存配置失败：{}", e);
                         telemetry::report(
                             TelemetryLogLevel::Error,
                             None,
-                            format!("保存配置失败: {}", e),
+                            format!("保存配置失败：{}", e),
                         )
                         .await;
                     }
@@ -112,7 +106,7 @@ pub async fn run_service() -> Result<()> {
                 std::thread::sleep(Duration::from_secs(30 * 60));
             }
             Ok(LoginResponse::Pending(_)) => {
-                info!("登录等待中，30秒后重试");
+                info!("登录等待中，30 秒后重试");
                 std::thread::sleep(Duration::from_secs(30));
             }
             Ok(LoginResponse::Expired(_)) => {
@@ -127,11 +121,11 @@ pub async fn run_service() -> Result<()> {
                 break;
             }
             Ok(LoginResponse::Error(e)) => {
-                error!("登录错误: {}", e);
+                error!("登录错误：{}", e);
                 std::thread::sleep(Duration::from_secs(30 * 60));
             }
             Err(e) => {
-                error!("登录错误: {}", e);
+                error!("登录错误：{}", e);
                 std::thread::sleep(Duration::from_secs(30));
             }
         }
@@ -150,7 +144,7 @@ pub async fn handle_status(args: StatusArgs) -> Result<()> {
             if response.subscriptions.is_empty() {
                 info!("您目前{}订阅", "没有".red().bold());
             } else {
-                info!("您的订阅:");
+                info!("您的订阅：");
                 for subscription in response.subscriptions {
                     let status = match subscription.status {
                         crate::models::UserSubscriptionStatus::Active => "有效".green().bold(),
@@ -159,9 +153,9 @@ pub async fn handle_status(args: StatusArgs) -> Result<()> {
                             "已取消".yellow().bold()
                         }
                     };
-                    info!("  状态: {}", status);
-                    info!("    开始日期: {}", subscription.start_date.0);
-                    info!("    结束日期: {}", subscription.end_date.0);
+                    info!("  状态：{}", status);
+                    info!("    开始日期：{}", subscription.start_date.0);
+                    info!("    结束日期：{}", subscription.end_date.0);
                 }
             }
         }
@@ -200,7 +194,7 @@ pub async fn handle_invite(args: InviteArgs) -> Result<()> {
     let promotion: serde_json::Value = response.json().await?;
     if let Some(code) = promotion.get("promotion").and_then(|p| p.get("code")) {
         info!(
-            "您的邀请码是: {}",
+            "您的邀请码是：{}",
             code.as_str().unwrap_or_default().green().bold()
         );
     }
@@ -219,8 +213,9 @@ fn check_cursor_installed() -> Result<()> {
 }
 
 fn get_cursor_installed_dir() -> Result<PathBuf> {
-    let user_config_dir = std::env::var("APPDATA").or_else(|_| std::env::var("HOME"))?;
-    let cursor_dir = std::path::Path::new(&user_config_dir).join("Cursor");
+    let config_dir =
+        dirs::config_dir().ok_or_else(|| anyhow::anyhow!("Failed to get config dir"))?;
+    let cursor_dir = config_dir.join("Cursor");
     Ok(cursor_dir)
 }
 
@@ -291,12 +286,14 @@ fn reset_machine_id(machine_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn get_program_path() -> Result<PathBuf> {
-    Ok(config::get_program_home()?.join("free-cursor-client.exe"))
-}
-
 fn install_program(target: &Path) -> Result<()> {
     let program = std::env::current_exe()?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get program parent"))?;
+    if !parent.exists() {
+        std::fs::create_dir_all(parent)?;
+    }
     std::fs::copy(&program, target)?;
     info!("Installed program to {}", target.display());
     Ok(())
@@ -349,10 +346,13 @@ fn uninstall_auto_start() -> Result<()> {
     Ok(())
 }
 
-fn stop_service(program: &Path) -> Result<()> {
+fn stop_service() -> Result<()> {
     info!("Stopping service");
 
     let self_pid = std::process::id();
+    let project_dirs = get_project_dirs()?;
+    let base = project_dirs.data_local_dir();
+    let legacy_base = get_legacy_program_path();
 
     let mut sys = sysinfo::System::new_with_specifics(
         sysinfo::RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
@@ -360,9 +360,18 @@ fn stop_service(program: &Path) -> Result<()> {
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
     let processes = sys.processes();
     for (pid, process) in processes {
-        if process.exe() == Some(program) && pid.as_u32() != self_pid {
-            info!("Stopping process: {}", pid.as_u32());
-            process.kill();
+        if pid.as_u32() != self_pid {
+            if let Some(exe) = process.exe() {
+                let match_legacy = if let Ok(legacy_base) = &legacy_base {
+                    exe.starts_with(legacy_base)
+                } else {
+                    false
+                };
+                if exe.starts_with(base) || match_legacy {
+                    info!("Stopping process: {}", pid.as_u32());
+                    process.kill();
+                }
+            }
         }
     }
 
@@ -420,30 +429,4 @@ fn quote_path(path: &OsStr) -> OsString {
         return unsafe { OsString::from_encoded_bytes_unchecked(buf) };
     }
     path.to_os_string()
-}
-
-fn create_program_home() -> Result<PathBuf> {
-    let app_home = config::get_program_home()?;
-    if !app_home.exists() {
-        std::fs::create_dir_all(&app_home)?;
-    }
-    Ok(app_home)
-}
-
-fn delete_program_home() -> Result<()> {
-    let app_home = config::get_program_home()?;
-    if app_home.exists() {
-        std::fs::remove_dir_all(&app_home)?;
-        info!("Deleted program home");
-    }
-    Ok(())
-}
-
-fn delete_program() -> Result<()> {
-    let program = get_program_path()?;
-    if program.exists() {
-        std::fs::remove_file(&program)?;
-        info!("Deleted program");
-    }
-    Ok(())
 }

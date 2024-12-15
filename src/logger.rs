@@ -8,8 +8,8 @@ use tracing_subscriber::{fmt::time::LocalTime, layer::SubscriberExt, EnvFilter, 
 use crate::config;
 
 pub fn init_file_logs() -> Result<()> {
-    let app_home = config::get_program_home()?;
-    let logs_dir = app_home.join("logs");
+    let project_dirs = config::get_project_dirs()?;
+    let logs_dir = project_dirs.data_local_dir().join("logs");
     std::fs::create_dir_all(&logs_dir)?;
 
     let local = time::OffsetDateTime::now_local()?;
