@@ -39,7 +39,7 @@ impl ToString for TelemetryLogLevel {
     }
 }
 
-pub(crate) async fn report(log: LogMessage) {
+pub(crate) async fn report(logs: Vec<LogMessage>) {
     let token = AppConfig::load_or_default().token.unwrap_or_default();
 
     let os_type = os_info::get().os_type().to_string();
@@ -49,23 +49,27 @@ pub(crate) async fn report(log: LogMessage) {
     let machine_id = machine_uid::get().unwrap_or_else(|err| format!("GetMachineIdError: {err:?}"));
     let build = env!("BUILD_ID");
     let pid = std::process::id();
-    let log = TelemetryLog {
-        token,
-        log: log.message,
-        os,
-        version: version.to_string(),
-        machine_id: machine_id.to_string(),
-        build: build.to_string(),
-        level: log.level,
-        pid,
-        seq: log.seq,
-        timestamp: log.timestamp,
-    };
+
+    let logs: Vec<_> = logs
+        .into_iter()
+        .map(|log| TelemetryLog {
+            token: token.clone(),
+            log: log.message,
+            os: os.clone(),
+            version: version.to_string(),
+            machine_id: machine_id.to_string(),
+            build: build.to_string(),
+            level: log.level,
+            pid,
+            seq: log.seq,
+            timestamp: log.timestamp,
+        })
+        .collect();
 
     let client = reqwest::Client::new();
     let _ = client
         .post("https://auth-server.freeai.dev/api/v1/cursor/telemetry")
-        .json(&log)
+        .json(&logs)
         .send()
         .await;
 }

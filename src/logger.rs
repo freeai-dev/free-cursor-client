@@ -76,20 +76,31 @@ fn spawn_telemetry_task(
     let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel();
 
     let handle = tokio::spawn(async move {
-        loop {
-            let log = tokio::select! {
+        let mut buffer = Vec::new();
+        let mut wants_exit = false;
+        while !wants_exit {
+            tokio::select! {
                 _ = shutdown_rx.recv() => {
-                    break;
+                    wants_exit = true;
                 }
-                log = receiver.recv() => log
+                log = receiver.recv() => {
+                    if let Some(log) = log {
+                        buffer.push(log);
+                    } else {
+                        wants_exit = true;
+                    }
+                }
             };
-            let Some(log) = log else {
-                break;
-            };
-            telemetry::report(log).await;
-        }
-        while let Ok(log) = receiver.try_recv() {
-            telemetry::report(log).await;
+
+            loop {
+                match receiver.try_recv() {
+                    Ok(log) => buffer.push(log),
+                    Err(_) => break,
+                }
+            }
+
+            telemetry::report(buffer).await;
+            buffer = Vec::new();
         }
     });
     *TELEMETRY_TASK_JOIN_HANDLE.lock() = Some(handle);
