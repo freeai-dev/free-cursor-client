@@ -17,11 +17,11 @@ use tracing::error;
 #[tokio::main]
 async fn main() {
     if let Err(e) = main_result().await {
-        error!("Exit with error: {e:?}");
+        error!("程序退出时发生错误：{e:?}");
         telemetry::report(
             telemetry::TelemetryLogLevel::Error,
             None,
-            format!("Exit with error: {e:?}"),
+            format!("程序退出时发生错误：{e:?}"),
         )
         .await;
     }

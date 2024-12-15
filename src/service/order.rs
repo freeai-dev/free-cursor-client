@@ -25,31 +25,31 @@ pub async fn handle_order() -> Result<()> {
         Some(token) => (None, None, Some(token)),
         None => {
             let name = loop {
-                println!("Please enter your name:");
+                println!("请输入您的姓名:");
                 let mut input = String::new();
                 std::io::stdin().read_line(&mut input)?;
                 let input = input.trim().to_string();
                 if !input.is_empty() {
                     break input;
                 }
-                println!("Name cannot be empty. Please try again.");
+                println!("姓名不能为空，请重新输入。");
             };
             let contact = loop {
-                println!("Please enter your contact info (phone or email):");
+                println!("请输入您的联系方式（手机号或邮箱）:");
                 let mut input = String::new();
                 std::io::stdin().read_line(&mut input)?;
                 let input = input.trim().to_string();
                 if !input.is_empty() {
                     break input;
                 }
-                println!("Contact info cannot be empty. Please try again.");
+                println!("联系方式不能为空，请重新输入。");
             };
             (Some(name), Some(contact), None)
         }
     };
 
     // Get promotion code
-    println!("Please enter your promotion code (press Enter to skip):");
+    println!("请输入邀请码（如无邀请码请直接按回车）:");
     let mut promotion_code = String::new();
     std::io::stdin().read_line(&mut promotion_code)?;
     let promotion_code = promotion_code.trim();
@@ -68,9 +68,9 @@ pub async fn handle_order() -> Result<()> {
     config.token = Some(order.token.clone());
     config.save()?;
 
-    println!("Order ID: {}", order.order.id);
+    println!("订单号: {}", order.order.id);
     println!(
-        "Token: {} (Token has been automatically saved to system)",
+        "Token: {} (Token 已自动保存到系统)",
         order.token
     );
 
@@ -85,17 +85,17 @@ pub async fn handle_order() -> Result<()> {
         .light_color(unicode::Dense1x2::Dark)
         .build();
 
-    println!("\nPlease scan the QR code below with Alipay to complete payment:");
+    println!("\n请使用支付宝扫描下方二维码完成支付:");
     println!("{}", qr_string);
-    println!("\nNote: The service activation may not be immediate after payment.");
-    println!("For urgent processing, please contact customer@freeai.dev");
+    println!("\n注意：支付完成后服务可能不会立即生效。");
+    println!("如需加急处理，请联系 customer@freeai.dev");
 
     Ok(())
 }
 
 fn select_package(packages: &[Package]) -> Result<Option<&Package>> {
     loop {
-        println!("\nAvailable packages:");
+        println!("\n可选套餐:");
         for (i, package) in packages.iter().enumerate() {
             println!(
                 "{}. {} - ￥{} ({})",
@@ -106,7 +106,7 @@ fn select_package(packages: &[Package]) -> Result<Option<&Package>> {
             );
         }
         println!(
-            "\nEnter the number of your choice (1-{}) or 'q' to quit:",
+            "\n请输入您选择的套餐编号 (1-{}) 或输入 'q' 退出:",
             packages.len()
         );
 
@@ -124,6 +124,6 @@ fn select_package(packages: &[Package]) -> Result<Option<&Package>> {
             }
         }
 
-        println!("Invalid selection. Please try again.");
+        println!("选择无效，请重新输入。");
     }
 }

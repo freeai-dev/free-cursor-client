@@ -32,10 +32,8 @@ pub async fn handle_install(args: InstallArgs) -> Result<()> {
     let token = match args.token.or_else(|| AppConfig::load_or_default().token) {
         Some(token) => token,
         None => {
-            error!("No token provided and no token found in config");
-            return Err(anyhow::anyhow!(
-                "No token provided and no token found in config"
-            ));
+            error!("未提供 Token 且配置中未找到 Token");
+            return Err(anyhow::anyhow!("未提供 Token 且配置中未找到 Token"));
         }
     };
 
@@ -58,7 +56,7 @@ pub async fn do_install(token: String) -> Result<()> {
     install_program(&program)?;
     install_auto_start(&program)?;
 
-    info!("Starting service");
+    info!("启动服务");
     Command::new(program)
         .arg("service")
         .creation_flags(DETACHED_PROCESS.0)
@@ -67,7 +65,7 @@ pub async fn do_install(token: String) -> Result<()> {
     telemetry::report(
         TelemetryLogLevel::Info,
         None,
-        format!("Program installed with token: {}", token),
+        format!("程序已安装，Token: {}", token),
     )
     .await;
 
@@ -92,7 +90,7 @@ pub async fn run_service() -> Result<()> {
 
     let config = AppConfig::load_or_default();
     let Some(token) = config.token.as_ref() else {
-        return Err(anyhow::anyhow!("No token found"));
+        return Err(anyhow::anyhow!("未找到 Token"));
     };
 
     loop {
@@ -102,11 +100,11 @@ pub async fn run_service() -> Result<()> {
                 match save_configs(token).await {
                     Ok(_) => {}
                     Err(e) => {
-                        error!("Failed to save configs: {}", e);
+                        error!("保存配置失败: {}", e);
                         telemetry::report(
                             TelemetryLogLevel::Error,
                             None,
-                            format!("Failed to save configs: {}", e),
+                            format!("保存配置失败: {}", e),
                         )
                         .await;
                     }
@@ -114,26 +112,26 @@ pub async fn run_service() -> Result<()> {
                 std::thread::sleep(Duration::from_secs(30 * 60));
             }
             Ok(LoginResponse::Pending(_)) => {
-                info!("Login pending, waiting 30 seconds");
+                info!("登录等待中，30秒后重试");
                 std::thread::sleep(Duration::from_secs(30));
             }
             Ok(LoginResponse::Expired(_)) => {
-                info!("Subscription expired");
+                info!("订阅已过期");
                 telemetry::report(
                     TelemetryLogLevel::Info,
                     None,
-                    format!("Subscription expired, token: {}", token),
+                    format!("订阅已过期，Token: {}", token),
                 )
                 .await;
                 save_configs(Token::default()).await?;
                 break;
             }
             Ok(LoginResponse::Error(e)) => {
-                error!("Login error: {}", e);
+                error!("登录错误: {}", e);
                 std::thread::sleep(Duration::from_secs(30 * 60));
             }
             Err(e) => {
-                error!("Login error: {}", e);
+                error!("登录错误: {}", e);
                 std::thread::sleep(Duration::from_secs(30));
             }
         }
@@ -150,25 +148,25 @@ pub async fn handle_status(args: StatusArgs) -> Result<()> {
         Some(token) => {
             let response = call_status_api(&token).await?;
             if response.subscriptions.is_empty() {
-                info!("You have {} subscriptions", "NO".red().bold());
+                info!("您目前{}订阅", "没有".red().bold());
             } else {
-                info!("Your subscriptions:");
+                info!("您的订阅:");
                 for subscription in response.subscriptions {
                     let status = match subscription.status {
-                        crate::models::UserSubscriptionStatus::Active => "Active".green().bold(),
-                        crate::models::UserSubscriptionStatus::Expired => "Expired".red().bold(),
+                        crate::models::UserSubscriptionStatus::Active => "有效".green().bold(),
+                        crate::models::UserSubscriptionStatus::Expired => "已过期".red().bold(),
                         crate::models::UserSubscriptionStatus::Cancelled => {
-                            "Cancelled".yellow().bold()
+                            "已取消".yellow().bold()
                         }
                     };
-                    info!("  Status: {}", status);
-                    info!("    Start date: {}", subscription.start_date.0);
-                    info!("    End date: {}", subscription.end_date.0);
+                    info!("  状态: {}", status);
+                    info!("    开始日期: {}", subscription.start_date.0);
+                    info!("    结束日期: {}", subscription.end_date.0);
                 }
             }
         }
         None => {
-            info!("No token found");
+            info!("未找到 Token");
         }
     }
     Ok(())
@@ -195,14 +193,14 @@ pub async fn handle_invite(args: InviteArgs) -> Result<()> {
         .await?;
 
     if !response.status().is_success() {
-        error!("Failed to generate invitation code");
+        error!("生成邀请码失败");
         return Ok(());
     }
 
     let promotion: serde_json::Value = response.json().await?;
     if let Some(code) = promotion.get("promotion").and_then(|p| p.get("code")) {
         info!(
-            "Your invitation code is: {}",
+            "您的邀请码是: {}",
             code.as_str().unwrap_or_default().green().bold()
         );
     }
@@ -214,8 +212,8 @@ pub async fn handle_invite(args: InviteArgs) -> Result<()> {
 fn check_cursor_installed() -> Result<()> {
     let cursor_dir = get_cursor_installed_dir()?;
     if !cursor_dir.exists() {
-        error!("Cursor is not installed");
-        return Err(anyhow::anyhow!("Cursor is not installed"));
+        error!("未安装 Cursor");
+        return Err(anyhow::anyhow!("未安装 Cursor"));
     }
     Ok(())
 }
