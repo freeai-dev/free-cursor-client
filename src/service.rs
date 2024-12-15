@@ -10,6 +10,7 @@ use std::{
     time::Duration,
 };
 use sysinfo::ProcessRefreshKind;
+use tokio::task::spawn_blocking;
 use tracing::{error, info, warn};
 use windows::{
     core::{HRESULT, HSTRING},
@@ -146,9 +147,13 @@ pub async fn run_service() -> Result<()> {
     }
 
     loop {
-        let _ = wait_cursor_processes(false);
+        let _ = wait_cursor_processes_async(false).await;
 
         let response = call_login_api(token).await;
+        let count = scan_cursor_processes().map(|v| v.len()).unwrap_or_default();
+        if count > 0 {
+            break;
+        }
         match response {
             Ok(LoginResponse::Token(token)) => {
                 match save_configs(token).await {
@@ -417,6 +422,11 @@ fn stop_service() -> Result<()> {
 
     info!("服务已停止");
 
+    Ok(())
+}
+
+async fn wait_cursor_processes_async(interactive: bool) -> Result<()> {
+    spawn_blocking(move || wait_cursor_processes(interactive)).await??;
     Ok(())
 }
 
