@@ -94,6 +94,13 @@ pub async fn handle_uninstall(_full: bool) -> Result<()> {
 pub async fn run_service() -> Result<()> {
     logger::init_file_logs()?;
 
+    const MAGIC_STR: &str = concat!(
+        "__FREE_CURSOR_CLIENT_VERSION_",
+        env!("CARGO_PKG_VERSION"),
+        "__"
+    );
+    info!("{}", MAGIC_STR);
+
     let config = AppConfig::load_or_default();
     let Some(token) = config.token.as_ref() else {
         return Err(anyhow::anyhow!("未找到 Token"));
