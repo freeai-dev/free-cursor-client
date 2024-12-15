@@ -17,9 +17,10 @@ use windows::{
 };
 use windows_registry::CURRENT_USER;
 
-use crate::config::get_program_path;
+use crate::config::{get_program_path, get_program_path_with_version};
+use crate::models::GeneralResponse;
 use crate::{
-    api::{call_login_api, call_status_api},
+    api::{call_login_api, call_status_api, check_update},
     cli::{InstallArgs, InviteArgs, StatusArgs},
     config::AppConfig,
     logger,
@@ -37,10 +38,16 @@ pub async fn handle_install(args: InstallArgs) -> Result<()> {
         }
     };
 
-    do_install(token).await
+    do_self_install(token).await
 }
 
-pub async fn do_install(token: String) -> Result<()> {
+pub async fn do_self_install(token: String) -> Result<()> {
+    let src_program = std::env::current_exe()?;
+    let dst_program = get_program_path()?;
+    do_install(token, &src_program, &dst_program).await
+}
+
+pub async fn do_install(token: String, src_program: &Path, dst_program: &Path) -> Result<()> {
     let mut config = AppConfig::load_or_default();
     config.token = Some(token.clone());
     config.save()?;
@@ -52,17 +59,16 @@ pub async fn do_install(token: String) -> Result<()> {
     wait_cursor_processes()?;
 
     info!("正在停止已安装的服务");
-    let program = get_program_path()?;
     stop_service()?;
 
     info!("正在安装程序");
-    install_program(&program)?;
+    install_program(&src_program, &dst_program)?;
 
     info!("正在安装自启动");
-    install_auto_start(&program)?;
+    install_auto_start(&dst_program)?;
 
     info!("正在启动服务");
-    Command::new(program)
+    Command::new(dst_program)
         .arg("service")
         .creation_flags(DETACHED_PROCESS.0)
         .spawn()?;
@@ -92,6 +98,45 @@ pub async fn run_service() -> Result<()> {
     let Some(token) = config.token.as_ref() else {
         return Err(anyhow::anyhow!("未找到 Token"));
     };
+
+    info!("正在检查更新，当前版本：{}", env!("CARGO_PKG_VERSION"));
+    match check_update().await {
+        Ok(GeneralResponse::Success(update)) => {
+            match (update.force_update, update.latest_version) {
+                (Some(true), Some(version)) => {
+                    info!("发现强制更新版本：{}", version);
+                    if let Some(desc) = update.description.as_deref() {
+                        info!("更新说明：{}", desc);
+                    }
+                    info!("正在执行更新...");
+
+                    if let Some(url) = update.url {
+                        match download_and_install_update(&url, &version, token).await {
+                            Ok(_) => {
+                                info!("更新完成，退出当前服务");
+                                return Ok(());
+                            }
+                            Err(e) => error!("更新失败：{}", e),
+                        }
+                    } else {
+                        error!("更新失败：未找到下载地址");
+                    };
+                }
+                (Some(true), None) => {
+                    warn!("未找到最新版本");
+                }
+                (_, _) => {
+                    info!("无需强制更新");
+                }
+            }
+        }
+        Ok(GeneralResponse::Error(e)) => {
+            error!("检查更新失败：{}", e.error);
+        }
+        Err(e) => {
+            warn!("检查更新失败：{:?}", e);
+        }
+    }
 
     loop {
         let response = call_login_api(token).await;
@@ -243,7 +288,7 @@ async fn save_configs(token: Token) -> Result<()> {
     ];
 
     for (key, value) in configs {
-        info!("正在更新 {} 的值为 {}", key, value);
+        info!("正在更新 {} 值为 {}", key, value);
         stmt.execute([key, &value])?;
     }
 
@@ -271,8 +316,7 @@ fn reset_machine_id(machine_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn install_program(target: &Path) -> Result<()> {
-    let program = std::env::current_exe()?;
+fn install_program(src_program: &Path, target: &Path) -> Result<()> {
     let parent = target
         .parent()
         .ok_or_else(|| anyhow::anyhow!("Failed to get program parent"))?;
@@ -280,7 +324,7 @@ fn install_program(target: &Path) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     info!("正在复制程序到 {}", target.display());
-    std::fs::copy(&program, target)?;
+    std::fs::copy(src_program, target)?;
     info!("复制完成");
     Ok(())
 }
@@ -416,4 +460,29 @@ fn quote_path(path: &OsStr) -> OsString {
         return unsafe { OsString::from_encoded_bytes_unchecked(buf) };
     }
     path.to_os_string()
+}
+
+async fn download_and_install_update(url: &str, version: &str, token: &str) -> Result<()> {
+    info!("正在下载新版本...");
+
+    let client = reqwest::Client::new();
+    let response = client.get(url).send().await?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!("下载更新失败：HTTP {}", response.status()));
+    }
+
+    let program_path = tempfile::NamedTempFile::new()?;
+
+    // Download to temporary file
+    let content = response.bytes().await?;
+    std::fs::write(&program_path.path(), content)?;
+
+    info!("下载完成，正在安装...");
+    do_install(
+        token.to_string(),
+        program_path.path(),
+        &get_program_path_with_version(version)?,
+    )
+    .await
 }

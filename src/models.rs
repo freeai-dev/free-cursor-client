@@ -135,3 +135,23 @@ impl fmt::Display for PackageDuration {
 pub struct PaymentUrlResponse {
     pub url: String,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", untagged)]
+pub enum GeneralResponse<T> {
+    Error(ErrorResponse),
+    Success(T),
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ErrorResponse {
+    pub error: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateCheckResponse {
+    pub force_update: Option<bool>,
+    pub latest_version: Option<String>,
+    pub description: Option<String>,
+    pub url: Option<String>,
+}

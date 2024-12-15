@@ -25,6 +25,7 @@ qrcode = "0.14.1"
 directories = "5.0.1"
 dirs = "5.0.1"
 parking_lot = "0.12.3"
+tempfile = "3.14.0"
 
 [build-dependencies]
 winres = "0.1"

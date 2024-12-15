@@ -3,7 +3,8 @@ use reqwest::Client;
 use std::time::Duration;
 
 use crate::models::{
-    LoginResponse, OrderResponse, PackageResponse, PaymentUrlResponse, StatusResponse,
+    GeneralResponse, LoginResponse, OrderResponse, PackageResponse, PaymentUrlResponse,
+    StatusResponse, UpdateCheckResponse,
 };
 
 pub async fn call_status_api(token: &str) -> Result<StatusResponse> {
@@ -85,6 +86,20 @@ pub async fn get_payment_url(order_id: &str) -> Result<PaymentUrlResponse> {
 
     let payment_url = response.json().await?;
     Ok(payment_url)
+}
+
+pub async fn check_update() -> Result<GeneralResponse<UpdateCheckResponse>> {
+    let client = create_client()?;
+    let response = client
+        .get(format!(
+            "https://auth-server.freeai.dev/api/v1/versions/check-update?currentVersion={}",
+            env!("CARGO_PKG_VERSION")
+        ))
+        .send()
+        .await?;
+
+    let update_info = response.json().await?;
+    Ok(update_info)
 }
 
 fn create_client() -> Result<reqwest::Client> {

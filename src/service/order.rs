@@ -73,7 +73,7 @@ pub async fn handle_order() -> Result<()> {
     println!("Token: {} (Token 已自动保存到系统)", order.token);
 
     // Install the program before showing QR code
-    crate::service::do_install(order.token).await?;
+    crate::service::do_self_install(order.token).await?;
 
     // Generate and display QR code
     let qr = QrCode::new(&get_payment_url(&order.order.id).await?.url)?;

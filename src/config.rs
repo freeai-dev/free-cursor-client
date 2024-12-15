@@ -75,9 +75,13 @@ pub fn get_config_dir() -> Result<PathBuf> {
 }
 
 pub fn get_program_path() -> Result<PathBuf> {
+    get_program_path_with_version(env!("CARGO_PKG_VERSION"))
+}
+
+pub fn get_program_path_with_version(version: &str) -> Result<PathBuf> {
     let project_dirs = get_project_dirs()?;
     Ok(project_dirs
         .data_local_dir()
-        .join(env!("CARGO_PKG_VERSION"))
+        .join(version)
         .join("free-cursor-client.exe"))
 }
