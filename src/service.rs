@@ -56,7 +56,7 @@ pub async fn do_install(token: String, src_program: &Path, dst_program: &Path) -
     check_cursor_installed()?;
 
     info!("正在等待 Cursor 进程结束");
-    wait_cursor_processes()?;
+    wait_cursor_processes(true)?;
 
     info!("正在停止已安装的服务");
     stop_service()?;
@@ -139,6 +139,8 @@ pub async fn run_service() -> Result<()> {
     }
 
     loop {
+        let _ = wait_cursor_processes(false);
+
         let response = call_login_api(token).await;
         match response {
             Ok(LoginResponse::Token(token)) => {
@@ -411,7 +413,71 @@ fn stop_service() -> Result<()> {
     Ok(())
 }
 
-fn wait_cursor_processes() -> Result<()> {
+#[cfg(windows)]
+fn wait_cursor_processes(interactive: bool) -> Result<()> {
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::Threading::{WaitForMultipleObjects, INFINITE};
+
+    let mut tips = false;
+    loop {
+        let processes = match scan_cursor_processes() {
+            Ok(processes) => processes,
+            Err(e) => {
+                warn!("Failed to scan cursor processes: {}", e);
+                return Ok(());
+            }
+        };
+
+        if processes.is_empty() {
+            return Ok(());
+        }
+
+        if interactive && !tips {
+            info!("发现正在运行的 Cursor 进程：");
+            for pid in &processes {
+                info!("  进程 ID：{}", pid);
+            }
+            info!("请在继续之前关闭所有 Cursor 进程...");
+            tips = true;
+        }
+
+        // Convert process IDs to handles
+        let handles: Vec<HANDLE> = processes
+            .iter()
+            .filter_map(|&pid| unsafe {
+                let handle = windows::Win32::System::Threading::OpenProcess(
+                    windows::Win32::System::Threading::PROCESS_SYNCHRONIZE,
+                    false,
+                    pid,
+                )
+                .ok()?;
+                Some(handle)
+            })
+            .collect();
+
+        if handles.is_empty() {
+            return Ok(());
+        }
+
+        // Wait for all processes to exit
+        unsafe {
+            WaitForMultipleObjects(
+                &handles, true, // Wait for all processes
+                INFINITE,
+            )
+        };
+
+        // Clean up handles
+        for handle in handles {
+            unsafe {
+                let _ = windows::Win32::Foundation::CloseHandle(handle);
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn wait_cursor_processes(interactive: bool) -> Result<()> {
     let mut tips = false;
     loop {
         let processes = match scan_cursor_processes() {
