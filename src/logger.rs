@@ -1,6 +1,8 @@
 use anyhow::Result;
 use parking_lot::Mutex;
 use std::fs::OpenOptions;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use time::macros::format_description;
@@ -15,15 +17,19 @@ use crate::{
 };
 
 // 定义日志消息结构
-struct LogMessage {
-    level: TelemetryLogLevel,
-    message: String,
+pub(crate) struct LogMessage {
+    pub(crate) level: TelemetryLogLevel,
+    pub(crate) message: String,
+    pub(crate) timestamp: i64,
+    pub(crate) seq: usize,
 }
 
 // 添加新的 TelemetryLayer 结构体
 struct TelemetryLayer {
     sender: mpsc::UnboundedSender<LogMessage>,
 }
+
+static SEQ: AtomicUsize = AtomicUsize::new(0);
 
 impl TelemetryLayer {
     fn new() -> (Self, mpsc::UnboundedReceiver<LogMessage>) {
@@ -52,6 +58,9 @@ impl<S: Subscriber> Layer<S> for TelemetryLayer {
         let _ = self.sender.send(LogMessage {
             level: telemetry_level,
             message,
+            timestamp: (time::OffsetDateTime::now_utc().unix_timestamp_nanos() / 1000 / 1000)
+                as i64,
+            seq: SEQ.fetch_add(1, Ordering::Relaxed),
         });
     }
 }
@@ -77,10 +86,10 @@ fn spawn_telemetry_task(
             let Some(log) = log else {
                 break;
             };
-            telemetry::report(log.level, None, log.message).await;
+            telemetry::report(log).await;
         }
         while let Ok(log) = receiver.try_recv() {
-            telemetry::report(log.level, None, log.message).await;
+            telemetry::report(log).await;
         }
     });
     *TELEMETRY_TASK_JOIN_HANDLE.lock() = Some(handle);

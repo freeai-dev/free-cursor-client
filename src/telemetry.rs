@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::config::AppConfig;
+use crate::{config::AppConfig, logger::LogMessage};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,6 +12,9 @@ struct TelemetryLog {
     machine_id: String,
     build: String,
     level: TelemetryLogLevel,
+    pid: u32,
+    seq: usize,
+    timestamp: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -36,10 +39,8 @@ impl ToString for TelemetryLogLevel {
     }
 }
 
-pub(crate) async fn report(level: TelemetryLogLevel, token: Option<String>, message: String) {
-    let token = token
-        .or_else(|| AppConfig::load_or_default().token)
-        .unwrap_or_default();
+pub(crate) async fn report(log: LogMessage) {
+    let token = AppConfig::load_or_default().token.unwrap_or_default();
 
     let os_type = os_info::get().os_type().to_string();
     let os_version = os_info::get().version().to_string();
@@ -47,14 +48,18 @@ pub(crate) async fn report(level: TelemetryLogLevel, token: Option<String>, mess
     let version = env!("CARGO_PKG_VERSION");
     let machine_id = machine_uid::get().unwrap_or_else(|err| format!("GetMachineIdError: {err:?}"));
     let build = env!("BUILD_ID");
+    let pid = std::process::id();
     let log = TelemetryLog {
         token,
-        log: message,
+        log: log.message,
         os,
         version: version.to_string(),
         machine_id: machine_id.to_string(),
         build: build.to_string(),
-        level,
+        level: log.level,
+        pid,
+        seq: log.seq,
+        timestamp: log.timestamp,
     };
 
     let client = reqwest::Client::new();
