@@ -149,7 +149,7 @@ pub fn init_file_logs() -> Result<()> {
     let log_path = logs_dir.join(format!("free-cursor-client-{date}.log"));
 
     let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::WARN.into())
+        .with_default_directive(LevelFilter::OFF.into())
         .from_env()?
         .add_directive(concat!(env!("CARGO_CRATE_NAME"), "=debug").parse()?);
 
@@ -185,7 +185,7 @@ pub fn init_file_logs() -> Result<()> {
 
 pub fn init_console_logs() -> Result<()> {
     let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::WARN.into())
+        .with_default_directive(LevelFilter::OFF.into())
         .from_env()?
         .add_directive(concat!(env!("CARGO_CRATE_NAME"), "=debug").parse()?);
 
