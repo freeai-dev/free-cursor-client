@@ -45,23 +45,29 @@ pub async fn do_install(token: String) -> Result<()> {
     config.token = Some(token.clone());
     config.save()?;
 
+    info!("正在检查 Cursor 是否已安装");
     check_cursor_installed()?;
 
+    info!("正在等待 Cursor 进程结束");
     wait_cursor_processes()?;
 
+    info!("正在停止已安装的服务");
     let program = get_program_path()?;
     stop_service()?;
 
+    info!("正在安装程序");
     install_program(&program)?;
+
+    info!("正在安装自启动");
     install_auto_start(&program)?;
 
-    info!("启动服务");
+    info!("正在启动服务");
     Command::new(program)
         .arg("service")
         .creation_flags(DETACHED_PROCESS.0)
         .spawn()?;
 
-    info!("程序已安装，Token: {}", token);
+    info!("安装完成，Token: {}", token);
 
     Ok(())
 }
@@ -69,8 +75,13 @@ pub async fn do_install(token: String) -> Result<()> {
 pub async fn handle_uninstall(_full: bool) -> Result<()> {
     logger::init_console_logs()?;
 
+    info!("正在停止服务");
     stop_service()?;
+
+    info!("正在卸载自启动");
     uninstall_auto_start()?;
+
+    info!("卸载完成");
     Ok(())
 }
 
@@ -268,8 +279,9 @@ fn install_program(target: &Path) -> Result<()> {
     if !parent.exists() {
         std::fs::create_dir_all(parent)?;
     }
+    info!("正在复制程序到 {}", target.display());
     std::fs::copy(&program, target)?;
-    info!("程序已安装到 {}", target.display());
+    info!("复制完成");
     Ok(())
 }
 
