@@ -24,11 +24,10 @@ use crate::{
     config::AppConfig,
     logger,
     models::{LoginResponse, Token},
-    telemetry::{self, TelemetryLogLevel},
 };
 
 pub async fn handle_install(args: InstallArgs) -> Result<()> {
-    tracing_subscriber::fmt().init();
+    logger::init_console_logs()?;
 
     let token = match args.token.or_else(|| AppConfig::load_or_default().token) {
         Some(token) => token,
@@ -62,18 +61,14 @@ pub async fn do_install(token: String) -> Result<()> {
         .creation_flags(DETACHED_PROCESS.0)
         .spawn()?;
 
-    telemetry::report(
-        TelemetryLogLevel::Info,
-        None,
-        format!("程序已安装，Token: {}", token),
-    )
-    .await;
+    info!("程序已安装，Token: {}", token);
 
     Ok(())
 }
 
 pub async fn handle_uninstall(_full: bool) -> Result<()> {
-    tracing_subscriber::fmt().init();
+    logger::init_console_logs()?;
+
     stop_service()?;
     uninstall_auto_start()?;
     Ok(())
@@ -95,12 +90,6 @@ pub async fn run_service() -> Result<()> {
                     Ok(_) => {}
                     Err(e) => {
                         error!("保存配置失败：{}", e);
-                        telemetry::report(
-                            TelemetryLogLevel::Error,
-                            None,
-                            format!("保存配置失败：{}", e),
-                        )
-                        .await;
                     }
                 }
                 std::thread::sleep(Duration::from_secs(30 * 60));
@@ -110,13 +99,7 @@ pub async fn run_service() -> Result<()> {
                 std::thread::sleep(Duration::from_secs(30));
             }
             Ok(LoginResponse::Expired(_)) => {
-                info!("订阅已过期");
-                telemetry::report(
-                    TelemetryLogLevel::Info,
-                    None,
-                    format!("订阅已过期，Token: {}", token),
-                )
-                .await;
+                error!("订阅已过期：Token: {}", token);
                 save_configs(Token::default()).await?;
                 break;
             }
@@ -135,7 +118,7 @@ pub async fn run_service() -> Result<()> {
 }
 
 pub async fn handle_status(args: StatusArgs) -> Result<()> {
-    tracing_subscriber::fmt().init();
+    logger::init_console_logs()?;
     let config = AppConfig::load_or_default();
     let token = args.token.or(config.token);
     match token {
@@ -167,7 +150,7 @@ pub async fn handle_status(args: StatusArgs) -> Result<()> {
 }
 
 pub async fn handle_invite(args: InviteArgs) -> Result<()> {
-    tracing_subscriber::fmt().init();
+    logger::init_console_logs()?;
     let client = reqwest::Client::new();
 
     let token = match args.token.or_else(|| AppConfig::load_or_default().token) {
@@ -253,16 +236,10 @@ async fn save_configs(token: Token) -> Result<()> {
         stmt.execute([key, &value])?;
     }
 
-    info!("配置已保存");
-    telemetry::report(
-        TelemetryLogLevel::Info,
-        None,
-        format!(
-            "Saved access token: {}, email: {}",
-            token.access_token, token.email
-        ),
-    )
-    .await;
+    info!(
+        "配置已保存：access token: {}, email: {}",
+        token.access_token, token.email
+    );
 
     Ok(())
 }

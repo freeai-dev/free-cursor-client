@@ -1,6 +1,7 @@
 use anyhow::Result;
 use qrcode::{render::unicode, QrCode};
 
+use crate::logger;
 use crate::{api::get_payment_url, models::Package};
 use crate::{
     api::{self},
@@ -8,7 +9,7 @@ use crate::{
 };
 
 pub async fn handle_order() -> Result<()> {
-    tracing_subscriber::fmt().init();
+    logger::init_console_logs()?;
 
     let config = AppConfig::load_or_default();
 

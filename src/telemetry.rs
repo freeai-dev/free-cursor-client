@@ -65,14 +65,9 @@ pub(crate) async fn report(level: TelemetryLogLevel, token: Option<String>, mess
         .send()
         .await
     {
-        Ok(response) => {
-            if !response.status().is_success() {
-                match response.text().await {
-                    Ok(text) => warn!("Failed to send telemetry log: {text}"),
-                    Err(e) => warn!("Failed to send telemetry log: {e:?}"),
-                }
-            }
+        Ok(_) => {}
+        Err(err) => {
+            warn!("Failed to send telemetry log: {err:?}");
         }
-        Err(e) => warn!("Failed to send telemetry log: {e:?}"),
     }
 }

@@ -1,11 +1,119 @@
 use anyhow::Result;
+use parking_lot::Mutex;
 use std::fs::OpenOptions;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use time::macros::format_description;
+use tokio::sync::mpsc;
 use tracing::{level_filters::LevelFilter, subscriber::set_global_default};
+use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::{fmt::time::LocalTime, layer::SubscriberExt, EnvFilter, Layer, Registry};
 
-use crate::config;
+use crate::{
+    config,
+    telemetry::{self, TelemetryLogLevel},
+};
+
+// 定义日志消息结构
+struct LogMessage {
+    level: TelemetryLogLevel,
+    message: String,
+}
+
+// 添加新的 TelemetryLayer 结构体
+struct TelemetryLayer {
+    sender: mpsc::UnboundedSender<LogMessage>,
+}
+
+impl TelemetryLayer {
+    fn new() -> (Self, mpsc::UnboundedReceiver<LogMessage>) {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        (Self { sender }, receiver)
+    }
+}
+
+impl<S: Subscriber> Layer<S> for TelemetryLayer {
+    fn on_event(&self, event: &Event<'_>, _ctx: tracing_subscriber::layer::Context<'_, S>) {
+        let metadata = event.metadata();
+        let level = metadata.level();
+
+        let telemetry_level = match *level {
+            Level::ERROR => TelemetryLogLevel::Error,
+            Level::WARN => TelemetryLogLevel::Warn,
+            Level::INFO => TelemetryLogLevel::Info,
+            Level::DEBUG | Level::TRACE => TelemetryLogLevel::Debug,
+        };
+
+        let mut message = String::new();
+        let mut visitor = MessageVisitor(&mut message);
+        event.record(&mut visitor);
+
+        // 通过 channel 发送日志消息
+        let _ = self.sender.send(LogMessage {
+            level: telemetry_level,
+            message,
+        });
+    }
+}
+
+// 修改 OnceLock 类型为 Sender 的克隆
+static SHUTDOWN_TX: OnceLock<mpsc::UnboundedSender<()>> = OnceLock::new();
+static TELEMETRY_TASK_JOIN_HANDLE: Mutex<Option<tokio::task::JoinHandle<()>>> = Mutex::new(None);
+
+// 修改 spawn_telemetry_task 函数，返回 shutdown sender
+fn spawn_telemetry_task(
+    mut receiver: mpsc::UnboundedReceiver<LogMessage>,
+) -> mpsc::UnboundedSender<()> {
+    let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel();
+
+    let handle = tokio::spawn(async move {
+        loop {
+            let log = tokio::select! {
+                _ = shutdown_rx.recv() => {
+                    break;
+                }
+                log = receiver.recv() => log
+            };
+            let Some(log) = log else {
+                break;
+            };
+            telemetry::report(log.level, None, log.message).await;
+        }
+        while let Ok(log) = receiver.try_recv() {
+            telemetry::report(log.level, None, log.message).await;
+        }
+    });
+    *TELEMETRY_TASK_JOIN_HANDLE.lock() = Some(handle);
+
+    shutdown_tx
+}
+
+// 添加一个等待日志发送完成的函数
+pub async fn wait_for_logger() {
+    if let Some(shutdown_tx) = SHUTDOWN_TX.get() {
+        let _ = shutdown_tx.send(());
+        if let Some(handle) = TELEMETRY_TASK_JOIN_HANDLE.lock().take() {
+            let _ = handle.await;
+        }
+    }
+}
+
+// 用于提取日志消息的访问器
+struct MessageVisitor<'a>(&'a mut String);
+
+impl<'a> tracing::field::Visit for MessageVisitor<'a> {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == "message" {
+            self.0.push_str(&format!("{:?}", value));
+        }
+    }
+
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == "message" {
+            self.0.push_str(value);
+        }
+    }
+}
 
 pub fn init_file_logs() -> Result<()> {
     let project_dirs = config::get_project_dirs()?;
@@ -33,9 +141,49 @@ pub fn init_file_logs() -> Result<()> {
                 .append(true)
                 .write(true)
                 .open(log_path)?,
-        ))
-        .with_filter(env_filter);
+        ));
 
-    set_global_default(Registry::default().with(file_log))?;
+    // 创建 telemetry layer 和 receiver
+    let (telemetry_layer, receiver) = TelemetryLayer::new();
+
+    // 启动日志处理任务并保存 shutdown sender
+    let shutdown_tx = spawn_telemetry_task(receiver);
+    let _ = SHUTDOWN_TX.set(shutdown_tx);
+
+    // 设置全局 subscriber
+    set_global_default(
+        Registry::default()
+            .with(env_filter)
+            .with(file_log)
+            .with(telemetry_layer),
+    )?;
+    Ok(())
+}
+
+pub fn init_console_logs() -> Result<()> {
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::WARN.into())
+        .from_env()?
+        .add_directive(concat!(env!("CARGO_CRATE_NAME"), "=debug").parse()?);
+
+    let console_log =
+        tracing_subscriber::fmt::layer().with_timer(LocalTime::new(format_description!(
+            "[year]-[month]-[day] [hour repr:24]:[minute]:[second]::[subsecond digits:4]"
+        )));
+
+    // 创建 telemetry layer 和 receiver
+    let (telemetry_layer, receiver) = TelemetryLayer::new();
+
+    // 启动日志处理任务并保存 shutdown sender
+    let shutdown_tx = spawn_telemetry_task(receiver);
+    let _ = SHUTDOWN_TX.set(shutdown_tx);
+
+    // 设置全局 subscriber
+    set_global_default(
+        Registry::default()
+            .with(env_filter)
+            .with(console_log)
+            .with(telemetry_layer),
+    )?;
     Ok(())
 }

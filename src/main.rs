@@ -18,13 +18,9 @@ use tracing::error;
 async fn main() {
     if let Err(e) = main_result().await {
         error!("程序退出时发生错误：{e:?}");
-        telemetry::report(
-            telemetry::TelemetryLogLevel::Error,
-            None,
-            format!("程序退出时发生错误：{e:?}"),
-        )
-        .await;
     }
+    // 等待日志发送完成
+    logger::wait_for_logger().await;
 }
 
 async fn main_result() -> Result<()> {
