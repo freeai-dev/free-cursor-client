@@ -17,7 +17,7 @@ use windows::{
 };
 use windows_registry::CURRENT_USER;
 
-use crate::config::{get_legacy_program_path, get_program_path, get_project_dirs};
+use crate::config::get_program_path;
 use crate::{
     api::{call_login_api, call_status_api},
     cli::{InstallArgs, InviteArgs, StatusArgs},
@@ -173,7 +173,7 @@ pub async fn handle_invite(args: InviteArgs) -> Result<()> {
     let token = match args.token.or_else(|| AppConfig::load_or_default().token) {
         Some(token) => token,
         None => {
-            error!("No token found");
+            error!("未找到 Token");
             return Ok(());
         }
     };
@@ -227,17 +227,14 @@ async fn save_configs(token: Token) -> Result<()> {
     let cursor_dir = get_cursor_installed_dir()?;
     let db_path = cursor_dir.join("User/globalStorage/state.vscdb");
     if !db_path.exists() {
-        error!("Database file not found: {}", db_path.display());
-        return Err(anyhow::anyhow!(
-            "Database file not found: {}",
-            db_path.display()
-        ));
+        error!("数据库文件未找到：{}", db_path.display());
+        return Err(anyhow::anyhow!("数据库文件未找到：{}", db_path.display()));
     }
 
-    info!("Opening {}", db_path.display());
+    info!("正在打开 {}", db_path.display());
     let conn = rusqlite::Connection::open(&db_path)?;
 
-    info!("Updating auth info in {}", db_path.display());
+    info!("正在更新 {} 中的认证信息", db_path.display());
     let mut stmt = conn.prepare(
         "INSERT INTO ItemTable (key, value) VALUES (?, ?) 
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -252,11 +249,11 @@ async fn save_configs(token: Token) -> Result<()> {
     ];
 
     for (key, value) in configs {
-        info!("Upserting {} with {}", key, value);
+        info!("正在更新 {} 的值为 {}", key, value);
         stmt.execute([key, &value])?;
     }
 
-    info!("Saved configs");
+    info!("配置已保存");
     telemetry::report(
         TelemetryLogLevel::Info,
         None,
@@ -281,7 +278,7 @@ fn reset_machine_id(machine_id: &str) -> Result<()> {
     }
     std::fs::write(storage_path, serde_json::to_string(&storage)?)?;
 
-    info!("Reset machine ID: {}", machine_id);
+    info!("已重置机器 ID：{}", machine_id);
 
     Ok(())
 }
@@ -295,17 +292,14 @@ fn install_program(target: &Path) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::copy(&program, target)?;
-    info!("Installed program to {}", target.display());
+    info!("程序已安装到 {}", target.display());
     Ok(())
 }
 
 fn install_auto_start(program: &Path) -> Result<()> {
     let mut command = quote_path(program.as_os_str());
     command.push(" service");
-    info!(
-        "Installing auto start with command: {}",
-        command.to_string_lossy()
-    );
+    info!("正在安装自启动，命令：{}", command.to_string_lossy());
 
     let key = CURRENT_USER
         .create("Software\\Microsoft\\Windows\\CurrentVersion\\Run")
@@ -314,7 +308,7 @@ fn install_auto_start(program: &Path) -> Result<()> {
     key.set_hstring("free-cursor-client", &value)
         .context("SetRegValue")?;
 
-    info!("Installed auto start");
+    info!("已安装自启动");
 
     Ok(())
 }
@@ -323,7 +317,7 @@ fn uninstall_auto_start() -> Result<()> {
     let key = match CURRENT_USER.create("Software\\Microsoft\\Windows\\CurrentVersion\\Run") {
         Ok(key) => key,
         Err(e) if e.code() == HRESULT::from_win32(ERROR_FILE_NOT_FOUND.0) => {
-            info!("Registry key not found");
+            info!("注册表键未找到");
             return Ok(());
         }
         Err(e) => {
@@ -341,41 +335,45 @@ fn uninstall_auto_start() -> Result<()> {
         }
     }
 
-    info!("Uninstalled auto start");
+    info!("已卸载自启动");
 
     Ok(())
 }
 
 fn stop_service() -> Result<()> {
-    info!("Stopping service");
-
     let self_pid = std::process::id();
-    let project_dirs = get_project_dirs()?;
-    let base = project_dirs.data_local_dir();
-    let legacy_base = get_legacy_program_path();
 
+    info!("正在扫描进程");
     let mut sys = sysinfo::System::new_with_specifics(
         sysinfo::RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
     );
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
     let processes = sys.processes();
+
+    let mut terminated_processes = vec![];
     for (pid, process) in processes {
         if pid.as_u32() != self_pid {
-            if let Some(exe) = process.exe() {
-                let match_legacy = if let Ok(legacy_base) = &legacy_base {
-                    exe.starts_with(legacy_base)
-                } else {
-                    false
-                };
-                if exe.starts_with(base) || match_legacy {
-                    info!("Stopping process: {}", pid.as_u32());
-                    process.kill();
-                }
+            let name = process
+                .name()
+                .to_ascii_lowercase()
+                .to_string_lossy()
+                .into_owned();
+            if name.starts_with("free-cursor-client") {
+                info!("正在停止进程：{}", pid.as_u32());
+                process.kill();
+                terminated_processes.push(process);
             }
         }
     }
 
-    info!("Stopped service");
+    if !terminated_processes.is_empty() {
+        info!("正在等待已终止的进程");
+        for process in terminated_processes {
+            process.wait();
+        }
+    }
+
+    info!("服务已停止");
 
     Ok(())
 }
@@ -394,11 +392,11 @@ fn wait_cursor_processes() -> Result<()> {
             return Ok(());
         }
         if !tips {
-            info!("Found running Cursor processes:");
+            info!("发现正在运行的 Cursor 进程：");
             for p in processes {
-                info!("  PID: {}", p);
+                info!("  进程 ID：{}", p);
             }
-            info!("Please close all Cursor processes before continuing...");
+            info!("请在继续之前关闭所有 Cursor 进程...");
             tips = true;
         }
         std::thread::sleep(Duration::from_millis(300));

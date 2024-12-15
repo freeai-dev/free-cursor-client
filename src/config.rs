@@ -81,10 +81,3 @@ pub fn get_program_path() -> Result<PathBuf> {
         .join(env!("CARGO_PKG_VERSION"))
         .join("free-cursor-client.exe"))
 }
-
-pub fn get_legacy_program_path() -> Result<PathBuf> {
-    let old_path = std::env::var("APPDATA")
-        .or_else(|_| std::env::var("HOME"))
-        .map(|dir| Path::new(&dir).join("free-cursor-client"))?;
-    Ok(old_path)
-}
