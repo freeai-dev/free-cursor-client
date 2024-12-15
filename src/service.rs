@@ -110,7 +110,7 @@ pub async fn run_service() -> Result<()> {
                     }
                     info!("正在执行更新...");
 
-                    if let Some(url) = update.url {
+                    if let Some(url) = update.download_url {
                         match download_and_install_update(&url, &version, token).await {
                             Ok(_) => {
                                 info!("更新完成，退出当前服务");

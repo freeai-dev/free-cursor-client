@@ -117,7 +117,10 @@ impl<'a> tracing::field::Visit for MessageVisitor<'a> {
 
 pub fn init_file_logs() -> Result<()> {
     let project_dirs = config::get_project_dirs()?;
-    let logs_dir = project_dirs.data_local_dir().join("logs");
+    let logs_dir = project_dirs
+        .data_local_dir()
+        .join(env!("CARGO_PKG_VERSION"))
+        .join("logs");
     std::fs::create_dir_all(&logs_dir)?;
 
     let local = time::OffsetDateTime::now_local()?;

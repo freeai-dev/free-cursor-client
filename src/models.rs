@@ -149,9 +149,10 @@ pub struct ErrorResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateCheckResponse {
     pub force_update: Option<bool>,
     pub latest_version: Option<String>,
     pub description: Option<String>,
-    pub url: Option<String>,
+    pub download_url: Option<String>,
 }
