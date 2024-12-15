@@ -1,5 +1,4 @@
 use serde::Serialize;
-use tracing::warn;
 
 use crate::config::AppConfig;
 
@@ -59,15 +58,9 @@ pub(crate) async fn report(level: TelemetryLogLevel, token: Option<String>, mess
     };
 
     let client = reqwest::Client::new();
-    match client
+    let _ = client
         .post("https://auth-server.freeai.dev/api/v1/cursor/telemetry")
         .json(&log)
         .send()
-        .await
-    {
-        Ok(_) => {}
-        Err(err) => {
-            warn!("Failed to send telemetry log: {err:?}");
-        }
-    }
+        .await;
 }
