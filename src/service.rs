@@ -1,6 +1,6 @@
 pub mod order;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use colored::Colorize;
 use std::os::windows::process::CommandExt;
 use std::{
@@ -266,8 +266,7 @@ fn check_cursor_installed() -> Result<()> {
 }
 
 fn get_cursor_installed_dir() -> Result<PathBuf> {
-    let config_dir =
-        dirs::config_dir().ok_or_else(|| anyhow::anyhow!("Failed to get config dir"))?;
+    let config_dir = dirs::config_dir().ok_or_else(|| anyhow::anyhow!("无法获取配置目录"))?;
     let cursor_dir = config_dir.join("Cursor");
     Ok(cursor_dir)
 }
@@ -317,13 +316,16 @@ async fn save_configs(token: Token) -> Result<()> {
 fn reset_machine_id(machine_id: &str) -> Result<()> {
     let cursor_dir = get_cursor_installed_dir()?;
     let storage_path = cursor_dir.join(r"User\globalStorage\storage.json");
-    let storage = std::fs::read_to_string(&storage_path)?;
-    let mut storage: serde_json::Value = serde_json::from_str(&storage)?;
+    let storage = std::fs::read_to_string(&storage_path)
+        .map_err(|e| anyhow::anyhow!("读取 storage.json 失败: {:?}", e))?;
+    let mut storage: serde_json::Value = serde_json::from_str(&storage)
+        .map_err(|e| anyhow::anyhow!("解析 storage.json 失败: {:?}", e))?;
 
     if let Some(obj) = storage.get_mut("telemetry.macMachineId") {
         *obj = serde_json::Value::from(machine_id);
     }
-    std::fs::write(storage_path, serde_json::to_string(&storage)?)?;
+    std::fs::write(storage_path, serde_json::to_string(&storage)?)
+        .map_err(|e| anyhow::anyhow!("写入 storage.json 失败: {:?}", e))?;
 
     info!("已重置机器 ID：{}", machine_id);
 
@@ -378,7 +380,8 @@ fn uninstall_auto_start() -> Result<()> {
             return Ok(());
         }
         Err(e) => {
-            return Err(anyhow::Error::from(e).context("RegOpenKey"));
+            error!("打开注册表键失败：{:?}", e);
+            bail!("打开注册表键失败：{:?}", e);
         }
     };
 
@@ -388,12 +391,12 @@ fn uninstall_auto_start() -> Result<()> {
             return Ok(());
         }
         Err(e) => {
-            return Err(anyhow::Error::from(e).context("RegDeleteValue"));
+            error!("删除注册表值失败：{:?}", e);
+            bail!("删除注册表值失败：{:?}", e);
         }
     }
 
     info!("已卸载自启动");
-
     Ok(())
 }
 
@@ -450,7 +453,7 @@ fn wait_cursor_processes(interactive: bool) -> Result<()> {
         let processes = match scan_cursor_processes() {
             Ok(processes) => processes,
             Err(e) => {
-                warn!("Failed to scan cursor processes: {}", e);
+                warn!("扫描 Cursor 进程失败: {:?}", e);
                 return Ok(());
             }
         };
@@ -510,7 +513,7 @@ fn wait_cursor_processes(interactive: bool) -> Result<()> {
         let processes = match scan_cursor_processes() {
             Ok(processes) => processes,
             Err(e) => {
-                warn!("Failed to scan cursor processes: {}", e);
+                warn!("扫描 Cursor 进程失败: {:?}", e);
                 return Ok(());
             }
         };
