@@ -8,10 +8,22 @@ Free Cursor Client is a tool for managing Free Cursor accounts.
 
 Download the latest release from [here](https://github.com/freeai-dev/free-cursor-client/releases).
 
-To create a payment order:
+For example, if you downloaded the file to `D:\apps\free-cursor-client.exe`, follow these steps:
+
+1. Open Command Prompt (CMD)
+2. Navigate to the program directory:
+   ```cmd
+   cd D:\apps
+   ```
+3. Execute the order command:
+   ```cmd
+   .\free-cursor-client.exe order
+   ```
+
+Alternatively, you can use the full path to execute:
 
 ```cmd
-start "" /B /WAIT .\free-cursor-client.exe order
+D:\apps\free-cursor-client.exe order
 ```
 
 After successful payment, please contact `customer@freeai.dev` to activate your account. After completing these steps, you'll need to restart Cursor.

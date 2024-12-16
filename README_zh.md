@@ -8,10 +8,22 @@ Free Cursor Client 是一个管理 Free Cursor 账户的工具。
 
 从[这里](https://github.com/freeai-dev/free-cursor-client/releases)下载最新版本。
 
-使用如下命令创建支付订单：
+假设您下载的文件保存在 `D:\apps\free-cursor-client.exe`，请按以下步骤操作：
+
+1. 打开命令提示符（CMD）
+2. 切换到程序所在目录：
+   ```cmd
+   cd D:\apps
+   ```
+3. 执行下单命令：
+   ```cmd
+   .\free-cursor-client.exe order
+   ```
+
+或者，您也可以直接使用完整路径执行：
 
 ```cmd
-.\free-cursor-client.exe order
+D:\apps\free-cursor-client.exe order
 ```
 
 支付成功后，请联系 `customer@freeai.dev` 激活账号。上述步骤操作完成后，需重启 Cursor。
