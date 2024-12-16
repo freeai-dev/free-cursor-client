@@ -418,7 +418,7 @@ dependencies = [
 
 [[package]]
 name = "free-cursor-client"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "anyhow",
  "clap",

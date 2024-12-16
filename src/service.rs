@@ -2,6 +2,7 @@ pub mod order;
 
 use anyhow::{bail, Context, Result};
 use colored::Colorize;
+use std::os::windows::ffi::OsStrExt as _;
 use std::os::windows::process::CommandExt;
 use std::{
     ffi::{OsStr, OsString},
@@ -12,6 +13,7 @@ use std::{
 use sysinfo::ProcessRefreshKind;
 use tokio::task::spawn_blocking;
 use tracing::{error, info, warn};
+use windows::Win32::Storage::FileSystem::{FILE_FLAGS_AND_ATTRIBUTES, INVALID_FILE_ATTRIBUTES};
 use windows::{
     core::{HRESULT, HSTRING},
     Win32::{Foundation::ERROR_FILE_NOT_FOUND, System::Threading::DETACHED_PROCESS},
@@ -273,7 +275,7 @@ fn get_cursor_installed_dir() -> Result<PathBuf> {
 
 async fn save_configs(token: Token) -> Result<()> {
     if let Some(machine_id) = token.machine_id {
-        reset_machine_id(&machine_id)?;
+        reset_machine_id(&machine_id).await?;
     }
 
     let cursor_dir = get_cursor_installed_dir()?;
@@ -313,9 +315,19 @@ async fn save_configs(token: Token) -> Result<()> {
     Ok(())
 }
 
-fn reset_machine_id(machine_id: &str) -> Result<()> {
+async fn reset_machine_id(machine_id: &str) -> Result<()> {
     let cursor_dir = get_cursor_installed_dir()?;
     let storage_path = cursor_dir.join(r"User\globalStorage\storage.json");
+
+    // Remove read-only attribute if it exists
+    if !storage_path.exists() {
+        error!("文件不存在：{}", storage_path.display());
+        bail!("文件不存在：{}", storage_path.display());
+    }
+
+    info!("正在设置文件为可写");
+    set_file_readonly(&storage_path, false);
+
     let storage = std::fs::read_to_string(&storage_path)
         .map_err(|e| anyhow::anyhow!("读取 storage.json 失败: {:?}", e))?;
     let mut storage: serde_json::Value = serde_json::from_str(&storage)
@@ -324,12 +336,51 @@ fn reset_machine_id(machine_id: &str) -> Result<()> {
     if let Some(obj) = storage.get_mut("telemetry.macMachineId") {
         *obj = serde_json::Value::from(machine_id);
     }
-    std::fs::write(storage_path, serde_json::to_string(&storage)?)
+    tokio::fs::write(&storage_path, serde_json::to_string(&storage)?)
+        .await
         .map_err(|e| anyhow::anyhow!("写入 storage.json 失败: {:?}", e))?;
+
+    info!("正在设置文件为只读");
+    set_file_readonly(&storage_path, true);
 
     info!("已重置机器 ID：{}", machine_id);
 
     Ok(())
+}
+
+fn set_file_readonly(path: &Path, readonly: bool) {
+    unsafe {
+        use windows::core::PCWSTR;
+        use windows::Win32::Storage::FileSystem::{
+            GetFileAttributesW, SetFileAttributesW, FILE_ATTRIBUTE_READONLY,
+        };
+
+        let path_wide: Vec<u16> = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let path_pcwstr = PCWSTR::from_raw(path_wide.as_ptr());
+
+        let attrs = GetFileAttributesW(path_pcwstr);
+        if attrs != INVALID_FILE_ATTRIBUTES {
+            let current_readonly = attrs & FILE_ATTRIBUTE_READONLY.0 != 0;
+            if current_readonly != readonly {
+                let flags = if readonly {
+                    FILE_ATTRIBUTE_READONLY.0
+                } else {
+                    0
+                };
+                match SetFileAttributesW(
+                    path_pcwstr,
+                    FILE_FLAGS_AND_ATTRIBUTES(attrs & !FILE_ATTRIBUTE_READONLY.0 | flags),
+                ) {
+                    Ok(_) => info!("已{}文件只读属性", if readonly { "设置" } else { "移除" }),
+                    Err(_) => warn!("{}文件只读属性失败", if readonly { "设置" } else { "移除" }),
+                }
+            }
+        }
+    }
 }
 
 async fn install_program(src_program: &Path, target: &Path) -> Result<()> {
