@@ -15,7 +15,7 @@ serde = { version = "1.0.215", features = ["derive"] }
 serde_json = "1.0.133"
 sysinfo = "0.33.0"
 time = { version = "0.3.36", features = ["local-offset", "macros", "parsing"] }
-tokio = { version = "1.42.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.42.0", features = ["macros", "rt-multi-thread", "fs"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "time", "local-time"] }
 vc-ltl = "5.1.1"

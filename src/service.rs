@@ -63,7 +63,7 @@ pub async fn do_install(token: String, src_program: &Path, dst_program: &Path) -
     stop_service()?;
 
     info!("正在安装程序");
-    install_program(&src_program, &dst_program)?;
+    install_program(&src_program, &dst_program).await?;
 
     info!("正在安装自启动");
     install_auto_start(&dst_program)?;
@@ -330,7 +330,7 @@ fn reset_machine_id(machine_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn install_program(src_program: &Path, target: &Path) -> Result<()> {
+async fn install_program(src_program: &Path, target: &Path) -> Result<()> {
     let parent = target
         .parent()
         .ok_or_else(|| anyhow::anyhow!("Failed to get program parent"))?;
@@ -338,7 +338,17 @@ fn install_program(src_program: &Path, target: &Path) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     info!("正在复制程序到 {}", target.display());
-    std::fs::copy(src_program, target)?;
+    let mut content = tokio::fs::read(src_program).await?;
+    let e_lfanew = content
+        .get(0x3c..0x3c + 2)
+        .ok_or_else(|| anyhow::anyhow!("Failed to get e_lfanew"))?;
+    let e_lfanew = u16::from_le_bytes(e_lfanew.try_into()?);
+    let subsystem_offset = e_lfanew + 0x18 + 68;
+    let subsystem = content
+        .get_mut(subsystem_offset as usize)
+        .ok_or_else(|| anyhow::anyhow!("Failed to get subsystem"))?;
+    *subsystem = 2;
+    tokio::fs::write(target, content).await?;
     info!("复制完成");
     Ok(())
 }
