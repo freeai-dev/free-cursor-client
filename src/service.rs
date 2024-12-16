@@ -152,12 +152,12 @@ pub async fn run_service() -> Result<()> {
         let _ = wait_cursor_processes_async(false).await;
 
         let response = call_login_api(token).await;
-        let count = scan_cursor_processes().map(|v| v.len()).unwrap_or_default();
-        if count > 0 {
-            break;
-        }
         match response {
             Ok(LoginResponse::Token(token)) => {
+                let count = scan_cursor_processes().map(|v| v.len()).unwrap_or_default();
+                if count > 0 {
+                    continue;
+                }
                 match save_configs(token).await {
                     Ok(_) => {}
                     Err(e) => {
@@ -172,7 +172,7 @@ pub async fn run_service() -> Result<()> {
             }
             Ok(LoginResponse::Expired(_)) => {
                 error!("订阅已过期：Token: {}", token);
-                save_configs(Token::default()).await?;
+                save_access_token(Token::default()).await?;
                 break;
             }
             Ok(LoginResponse::Error(e)) => {
@@ -274,10 +274,14 @@ fn get_cursor_installed_dir() -> Result<PathBuf> {
 }
 
 async fn save_configs(token: Token) -> Result<()> {
-    if let Some(machine_id) = token.machine_id {
-        reset_machine_id(&machine_id).await?;
+    if let Some(machine_id) = &token.machine_id {
+        reset_machine_id(machine_id).await?;
     }
+    save_access_token(token).await?;
+    Ok(())
+}
 
+async fn save_access_token(token: Token) -> Result<()> {
     let cursor_dir = get_cursor_installed_dir()?;
     let db_path = cursor_dir.join("User/globalStorage/state.vscdb");
     if !db_path.exists() {
