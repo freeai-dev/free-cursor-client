@@ -333,16 +333,16 @@ async fn reset_machine_id(machine_id: &str) -> Result<()> {
     set_file_readonly(&storage_path, false);
 
     let storage = std::fs::read_to_string(&storage_path)
-        .map_err(|e| anyhow::anyhow!("读取 storage.json 失败: {:?}", e))?;
+        .map_err(|e| anyhow::anyhow!("读取 storage.json 失败：{:?}", e))?;
     let mut storage: serde_json::Value = serde_json::from_str(&storage)
-        .map_err(|e| anyhow::anyhow!("解析 storage.json 失败: {:?}", e))?;
+        .map_err(|e| anyhow::anyhow!("解析 storage.json 失败：{:?}", e))?;
 
     if let Some(obj) = storage.get_mut("telemetry.macMachineId") {
         *obj = serde_json::Value::from(machine_id);
     }
     tokio::fs::write(&storage_path, serde_json::to_string(&storage)?)
         .await
-        .map_err(|e| anyhow::anyhow!("写入 storage.json 失败: {:?}", e))?;
+        .map_err(|e| anyhow::anyhow!("写入 storage.json 失败：{:?}", e))?;
 
     info!("正在设置文件为只读");
     set_file_readonly(&storage_path, true);
@@ -508,7 +508,7 @@ fn wait_cursor_processes(interactive: bool) -> Result<()> {
         let processes = match scan_cursor_processes() {
             Ok(processes) => processes,
             Err(e) => {
-                warn!("扫描 Cursor 进程失败: {:?}", e);
+                warn!("扫描 Cursor 进程失败：{:?}", e);
                 return Ok(());
             }
         };
@@ -568,7 +568,7 @@ fn wait_cursor_processes(interactive: bool) -> Result<()> {
         let processes = match scan_cursor_processes() {
             Ok(processes) => processes,
             Err(e) => {
-                warn!("扫描 Cursor 进程失败: {:?}", e);
+                warn!("扫描 Cursor 进程失败：{:?}", e);
                 return Ok(());
             }
         };

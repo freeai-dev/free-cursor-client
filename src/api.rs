@@ -1,11 +1,17 @@
 use anyhow::Result;
 use reqwest::Client;
+use serde::Deserialize;
 use std::time::Duration;
 
 use crate::models::{
     GeneralResponse, LoginResponse, OrderResponse, PackageResponse, PaymentUrlResponse,
     StatusResponse, UpdateCheckResponse,
 };
+
+#[derive(Deserialize)]
+pub struct OrderStatus {
+    pub status: String,
+}
 
 pub async fn call_status_api(token: &str) -> Result<StatusResponse> {
     let client = Client::builder()
@@ -100,6 +106,16 @@ pub async fn check_update() -> Result<GeneralResponse<UpdateCheckResponse>> {
 
     let update_info = response.json().await?;
     Ok(update_info)
+}
+
+pub async fn get_order_status(order_id: &str) -> Result<GeneralResponse<OrderStatus>> {
+    let client = create_client()?;
+    let url = format!("https://auth-server.freeai.dev/api/v1/orders/{}", order_id);
+
+    let response = client.get(&url).send().await?;
+    let status = response.json().await?;
+
+    Ok(status)
 }
 
 fn create_client() -> Result<reqwest::Client> {

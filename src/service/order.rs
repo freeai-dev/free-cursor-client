@@ -1,12 +1,15 @@
-use anyhow::Result;
-use qrcode::{render::unicode, QrCode};
+use anyhow::{bail, Result};
+use tracing::error;
 
 use crate::logger;
+use crate::models::GeneralResponse;
 use crate::{api::get_payment_url, models::Package};
 use crate::{
     api::{self},
     config::AppConfig,
 };
+use std::time::{Duration, Instant};
+use tokio::time::sleep;
 
 pub async fn handle_order() -> Result<()> {
     logger::init_console_logs()?;
@@ -72,23 +75,34 @@ pub async fn handle_order() -> Result<()> {
     println!("订单号：{}", order.order.id);
     println!("Token: {} (Token 已自动保存到系统)", order.token);
 
-    // Install the program before showing QR code
-    crate::service::do_self_install(order.token).await?;
+    open::that_detached(&get_payment_url(&order.order.id).await?.url)?;
 
-    // Generate and display QR code
-    let qr = QrCode::new(&get_payment_url(&order.order.id).await?.url)?;
-    let qr_string = qr
-        .render::<unicode::Dense1x2>()
-        .dark_color(unicode::Dense1x2::Light)
-        .light_color(unicode::Dense1x2::Dark)
-        .build();
+    // Add polling logic
+    println!("\n等待支付完成...");
+    let start_time = Instant::now();
+    let timeout = Duration::from_secs(15 * 60); // 15 minutes
 
-    println!("\n请使用支付宝扫描下方二维码完成支付：");
-    println!("{}", qr_string);
-    println!("\n注意：支付完成后服务可能不会立即生效。");
-    println!("如需加急处理，请联系 customer@freeai.dev");
+    while start_time.elapsed() < timeout {
+        sleep(Duration::from_secs(10)).await; // Poll every 3 seconds
 
-    Ok(())
+        let order_status = api::get_order_status(&order.order.id).await?;
+        match order_status {
+            GeneralResponse::Success(order_status) => {
+                if order_status.status == "completed" {
+                    println!("支付成功！");
+                    crate::service::do_self_install(order.token).await?;
+                    return Ok(());
+                }
+            }
+            GeneralResponse::Error(err) => {
+                error!("获取订单状态失败：{}", err.error);
+                bail!("获取订单状态失败：{}", err.error);
+            }
+        }
+    }
+
+    println!("支付超时，请重新尝试下单。");
+    anyhow::bail!("支付超时，请重新尝试下单。")
 }
 
 fn select_package(packages: &[Package]) -> Result<Option<&Package>> {
