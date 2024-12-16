@@ -11,7 +11,7 @@ Download the latest release from [here](https://github.com/freeai-dev/free-curso
 To create a payment order:
 
 ```cmd
-.\free-cursor-client.exe order
+start "" /B /WAIT .\free-cursor-client.exe order
 ```
 
 After successful payment, please contact `customer@freeai.dev` to activate your account. After completing these steps, you'll need to restart Cursor.
