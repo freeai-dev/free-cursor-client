@@ -40,7 +40,9 @@ impl ToString for TelemetryLogLevel {
 }
 
 pub(crate) async fn report(logs: Vec<LogMessage>) {
-    let token = AppConfig::load_or_default().token.unwrap_or_default();
+    let token = AppConfig::load_or_default_silent()
+        .token
+        .unwrap_or_default();
 
     let os_type = os_info::get().os_type().to_string();
     let os_version = os_info::get().version().to_string();

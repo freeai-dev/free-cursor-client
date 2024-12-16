@@ -15,7 +15,7 @@ pub struct AppConfig {
 }
 
 /// Migrate config from old location to new standard location
-fn migrate_old_config() -> Result<()> {
+fn migrate_old_config(silent: bool) -> Result<()> {
     // Try to get old config path from APPDATA/HOME
     let old_path = std::env::var("APPDATA")
         .or_else(|_| std::env::var("HOME"))
@@ -30,7 +30,9 @@ fn migrate_old_config() -> Result<()> {
 
             // Only migrate if new config doesn't exist
             if !new_config.exists() {
-                info!("Migrating config from old location to new location");
+                if !silent {
+                    info!("Migrating config from old location to new location");
+                }
                 std::fs::create_dir_all(new_config_dir)?;
                 std::fs::copy(&old_config, &new_config)?;
             }
@@ -40,9 +42,9 @@ fn migrate_old_config() -> Result<()> {
 }
 
 impl AppConfig {
-    pub fn load() -> Result<Self> {
+    pub fn load(silent: bool) -> Result<Self> {
         // Try to migrate old config first
-        let _ = migrate_old_config();
+        let _ = migrate_old_config(silent);
 
         let config_dir = get_config_dir()?;
         let config_path = Path::new(&config_dir).join("config.json");
@@ -51,12 +53,19 @@ impl AppConfig {
     }
 
     pub fn load_or_default() -> Self {
-        match Self::load() {
+        match Self::load(false) {
             Ok(config) => config,
             Err(_) => {
                 info!("No config found, using default");
                 Self::default()
             }
+        }
+    }
+
+    pub fn load_or_default_silent() -> Self {
+        match Self::load(true) {
+            Ok(config) => config,
+            Err(_) => Self::default(),
         }
     }
 
