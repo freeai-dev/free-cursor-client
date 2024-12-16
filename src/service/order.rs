@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use tracing::error;
+use tracing::{error, info};
 
 use crate::logger;
 use crate::models::GeneralResponse;
@@ -72,13 +72,17 @@ pub async fn handle_order() -> Result<()> {
     config.token = Some(order.token.clone());
     config.save()?;
 
-    println!("订单号：{}", order.order.id);
-    println!("Token: {} (Token 已自动保存到系统)", order.token);
+    info!("订单号：{}", order.order.id);
+    info!("Token: {} (Token 已自动保存到系统)", order.token);
 
+    info!(
+        "正在打开支付页面：{}",
+        get_payment_url(&order.order.id).await?.url
+    );
     open::that_detached(&get_payment_url(&order.order.id).await?.url)?;
 
     // Add polling logic
-    println!("\n等待支付完成...");
+    info!("\n等待支付完成...");
     let start_time = Instant::now();
     let timeout = Duration::from_secs(15 * 60); // 15 minutes
 
@@ -89,7 +93,7 @@ pub async fn handle_order() -> Result<()> {
         match order_status {
             GeneralResponse::Success(order_status) => {
                 if order_status.status == "completed" {
-                    println!("支付成功！");
+                    info!("支付成功！");
                     crate::service::do_self_install(order.token).await?;
                     return Ok(());
                 }
@@ -101,7 +105,7 @@ pub async fn handle_order() -> Result<()> {
         }
     }
 
-    println!("支付超时，请重新尝试下单。");
+    info!("支付超时，请重新尝试下单。");
     anyhow::bail!("支付超时，请重新尝试下单。")
 }
 
