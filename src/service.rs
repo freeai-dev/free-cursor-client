@@ -12,7 +12,7 @@ use std::{
 };
 use sysinfo::ProcessRefreshKind;
 use tokio::task::spawn_blocking;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use windows::Win32::Storage::FileSystem::{FILE_FLAGS_AND_ATTRIBUTES, INVALID_FILE_ATTRIBUTES};
 use windows::{
     core::{HRESULT, HSTRING},
@@ -285,14 +285,15 @@ async fn save_access_token(token: Token) -> Result<()> {
     let cursor_dir = get_cursor_installed_dir()?;
     let db_path = cursor_dir.join("User/globalStorage/state.vscdb");
     if !db_path.exists() {
-        error!("数据库文件未找到：{}", db_path.display());
-        return Err(anyhow::anyhow!("数据库文件未找到：{}", db_path.display()));
+        debug!("数据库文件未找到：{}", db_path.display());
+        return Err(anyhow::anyhow!("数据库文件未找到"));
     }
 
-    info!("正在打开 {}", db_path.display());
-    let conn = rusqlite::Connection::open(&db_path)?;
+    debug!("正在打开 {}", db_path.display());
+    let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| anyhow::anyhow!("连接数据库失败：{:?}", e))?;
 
-    info!("正在更新 {} 中的认证信息", db_path.display());
+    debug!("正在更新 {} 中的认证信息", db_path.display());
     let mut stmt = conn.prepare(
         "INSERT INTO ItemTable (key, value) VALUES (?, ?) 
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -307,14 +308,11 @@ async fn save_access_token(token: Token) -> Result<()> {
     ];
 
     for (key, value) in configs {
-        info!("正在更新 {} 值为 {}", key, value);
+        debug!("正在更新 {} 值为 {}", key, &value[..50.min(value.len())]);
         stmt.execute([key, &value])?;
     }
 
-    info!(
-        "配置已保存：access token: {}, email: {}",
-        token.access_token, token.email
-    );
+    info!("用户已登录 email: {}", token.email);
 
     Ok(())
 }

@@ -17,7 +17,7 @@ sysinfo = "0.33.0"
 time = { version = "0.3.36", features = ["local-offset", "macros", "parsing"] }
 tokio = { version = "1.42.0", features = ["macros", "rt-multi-thread", "fs"] }
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "time", "local-time"] }
+tracing-subscriber = { version = "0.3.18", features = ["time", "local-time"] }
 vc-ltl = "5.1.1"
 windows = { version = "0.58.0", features = ["Win32_Security", "Win32_System_Console", "Win32_System_Threading", "Win32_Storage_FileSystem"] }
 windows-registry = "0.2.0"

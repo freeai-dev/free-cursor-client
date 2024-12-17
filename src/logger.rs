@@ -7,9 +7,10 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use time::macros::format_description;
 use tokio::sync::mpsc;
-use tracing::{level_filters::LevelFilter, subscriber::set_global_default};
+use tracing::subscriber::set_global_default;
 use tracing::{Event, Level, Subscriber};
-use tracing_subscriber::{fmt::time::LocalTime, layer::SubscriberExt, EnvFilter, Layer, Registry};
+use tracing_subscriber::filter;
+use tracing_subscriber::{fmt::time::LocalTime, layer::SubscriberExt, Layer, Registry};
 
 use crate::{
     config,
@@ -148,11 +149,6 @@ pub fn init_file_logs() -> Result<()> {
     let date = local.format(&format)?;
     let log_path = logs_dir.join(format!("free-cursor-client-{date}.log"));
 
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::OFF.into())
-        .from_env()?
-        .add_directive(concat!(env!("CARGO_CRATE_NAME"), "=debug").parse()?);
-
     let file_log = tracing_subscriber::fmt::layer()
         .with_ansi(false)
         .with_timer(LocalTime::new(format_description!(
@@ -164,49 +160,40 @@ pub fn init_file_logs() -> Result<()> {
                 .append(true)
                 .write(true)
                 .open(log_path)?,
-        ));
+        ))
+        .with_filter(filter::Targets::new().with_target(env!("CARGO_CRATE_NAME"), Level::INFO));
 
     // 创建 telemetry layer 和 receiver
     let (telemetry_layer, receiver) = TelemetryLayer::new();
+    let telemetry_layer = telemetry_layer
+        .with_filter(filter::Targets::new().with_target(env!("CARGO_CRATE_NAME"), Level::DEBUG));
 
     // 启动日志处理任务并保存 shutdown sender
     let shutdown_tx = spawn_telemetry_task(receiver);
     let _ = SHUTDOWN_TX.set(shutdown_tx);
 
     // 设置全局 subscriber
-    set_global_default(
-        Registry::default()
-            .with(env_filter)
-            .with(file_log)
-            .with(telemetry_layer),
-    )?;
+    set_global_default(Registry::default().with(file_log).with(telemetry_layer))?;
     Ok(())
 }
 
 pub fn init_console_logs() -> Result<()> {
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::OFF.into())
-        .from_env()?
-        .add_directive(concat!(env!("CARGO_CRATE_NAME"), "=debug").parse()?);
-
-    let console_log =
-        tracing_subscriber::fmt::layer().with_timer(LocalTime::new(format_description!(
+    let console_log = tracing_subscriber::fmt::layer()
+        .with_timer(LocalTime::new(format_description!(
             "[year]-[month]-[day] [hour repr:24]:[minute]:[second]::[subsecond digits:4]"
-        )));
+        )))
+        .with_filter(filter::Targets::new().with_target(env!("CARGO_CRATE_NAME"), Level::INFO));
 
     // 创建 telemetry layer 和 receiver
     let (telemetry_layer, receiver) = TelemetryLayer::new();
+    let telemetry_layer = telemetry_layer
+        .with_filter(filter::Targets::new().with_target(env!("CARGO_CRATE_NAME"), Level::DEBUG));
 
     // 启动日志处理任务并保存 shutdown sender
     let shutdown_tx = spawn_telemetry_task(receiver);
     let _ = SHUTDOWN_TX.set(shutdown_tx);
 
     // 设置全局 subscriber
-    set_global_default(
-        Registry::default()
-            .with(env_filter)
-            .with(console_log)
-            .with(telemetry_layer),
-    )?;
+    set_global_default(Registry::default().with(console_log).with(telemetry_layer))?;
     Ok(())
 }
