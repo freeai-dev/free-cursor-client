@@ -87,7 +87,7 @@ pub async fn handle_order() -> Result<()> {
     let timeout = Duration::from_secs(15 * 60); // 15 minutes
 
     while start_time.elapsed() < timeout {
-        sleep(Duration::from_secs(10)).await; // Poll every 3 seconds
+        sleep(Duration::from_secs(3)).await; // Poll every 3 seconds
 
         let order_status = api::get_order_status(&order.order.id).await?;
         match order_status {
