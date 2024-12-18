@@ -325,7 +325,9 @@ async fn reset_machine_id(machine_id: &str) -> Result<()> {
     }
 
     info!("正在设置文件为可写");
-    set_file_readonly(&storage_path, false);
+    if let Err(e) = set_file_readonly(&storage_path, false).await {
+        warn!("设置文件为可写失败：{:?}", e);
+    }
 
     let storage = std::fs::read_to_string(&storage_path)
         .map_err(|e| anyhow::anyhow!("读取 storage.json 失败：{:?}", e))?;
@@ -340,54 +342,18 @@ async fn reset_machine_id(machine_id: &str) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("写入 storage.json 失败：{:?}", e))?;
 
     info!("正在设置文件为只读");
-    set_file_readonly(&storage_path, true);
+    let _ = set_file_readonly(&storage_path, true).await;
 
     info!("已重置机器 ID：{}", machine_id);
 
     Ok(())
 }
 
-#[cfg(not(windows))]
-fn set_file_readonly(_path: &Path, _readonly: bool) {}
-
-#[cfg(windows)]
-fn set_file_readonly(path: &Path, readonly: bool) {
-    use std::os::windows::ffi::OsStrExt as _;
-
-    use windows::Win32::Storage::FileSystem::{FILE_FLAGS_AND_ATTRIBUTES, INVALID_FILE_ATTRIBUTES};
-
-    unsafe {
-        use windows::core::PCWSTR;
-        use windows::Win32::Storage::FileSystem::{
-            GetFileAttributesW, SetFileAttributesW, FILE_ATTRIBUTE_READONLY,
-        };
-
-        let path_wide: Vec<u16> = path
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
-        let path_pcwstr = PCWSTR::from_raw(path_wide.as_ptr());
-
-        let attrs = GetFileAttributesW(path_pcwstr);
-        if attrs != INVALID_FILE_ATTRIBUTES {
-            let current_readonly = attrs & FILE_ATTRIBUTE_READONLY.0 != 0;
-            if current_readonly != readonly {
-                let flags = if readonly {
-                    FILE_ATTRIBUTE_READONLY.0
-                } else {
-                    0
-                };
-                match SetFileAttributesW(
-                    path_pcwstr,
-                    FILE_FLAGS_AND_ATTRIBUTES(attrs & !FILE_ATTRIBUTE_READONLY.0 | flags),
-                ) {
-                    Ok(_) => info!("已{}文件只读属性", if readonly { "设置" } else { "移除" }),
-                    Err(_) => warn!("{}文件只读属性失败", if readonly { "设置" } else { "移除" }),
-                }
-            }
-        }
-    }
+async fn set_file_readonly(path: &Path, readonly: bool) -> anyhow::Result<()> {
+    let mut perm = tokio::fs::metadata(path).await?.permissions();
+    perm.set_readonly(readonly);
+    tokio::fs::set_permissions(path, perm).await?;
+    Ok(())
 }
 
 async fn install_program(src_program: &Path, target: &Path) -> Result<()> {
@@ -395,7 +361,7 @@ async fn install_program(src_program: &Path, target: &Path) -> Result<()> {
         .parent()
         .ok_or_else(|| anyhow::anyhow!("Failed to get program parent"))?;
     if !parent.exists() {
-        std::fs::create_dir_all(parent)?;
+        tokio::fs::create_dir_all(parent).await?;
     }
 
     info!("正在复制程序到 {}", target.display());
