@@ -98,8 +98,9 @@ pub async fn check_update() -> Result<GeneralResponse<UpdateCheckResponse>> {
     let client = create_client()?;
     let response = client
         .get(format!(
-            "https://auth-server.freeai.dev/api/v1/versions/check-update?currentVersion={}",
-            env!("CARGO_PKG_VERSION")
+            "https://auth-server.freeai.dev/api/v1/versions/check-update?currentVersion={}&platform={}",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS
         ))
         .send()
         .await?;
