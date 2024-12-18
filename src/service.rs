@@ -2,8 +2,8 @@ pub mod order;
 
 use anyhow::{bail, Context, Result};
 use colored::Colorize;
-use std::os::windows::ffi::OsStrExt as _;
-use std::os::windows::process::CommandExt;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt as _;
 use std::{
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
@@ -13,12 +13,6 @@ use std::{
 use sysinfo::ProcessRefreshKind;
 use tokio::task::spawn_blocking;
 use tracing::{debug, error, info, warn};
-use windows::Win32::Storage::FileSystem::{FILE_FLAGS_AND_ATTRIBUTES, INVALID_FILE_ATTRIBUTES};
-use windows::{
-    core::{HRESULT, HSTRING},
-    Win32::{Foundation::ERROR_FILE_NOT_FOUND, System::Threading::DETACHED_PROCESS},
-};
-use windows_registry::CURRENT_USER;
 
 use crate::config::{get_program_path, get_program_path_with_version};
 use crate::models::GeneralResponse;
@@ -71,10 +65,13 @@ pub async fn do_install(token: String, src_program: &Path, dst_program: &Path) -
     install_auto_start(&dst_program)?;
 
     info!("正在启动服务");
+    #[cfg(windows)]
     Command::new(dst_program)
         .arg("service")
-        .creation_flags(DETACHED_PROCESS.0)
+        .creation_flags(windows::Win32::System::Threading::DETACHED_PROCESS.0)
         .spawn()?;
+    #[cfg(not(windows))]
+    Command::new(dst_program).arg("service").spawn()?;
 
     info!("安装完成，Token: {}", token);
 
@@ -350,7 +347,15 @@ async fn reset_machine_id(machine_id: &str) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(windows))]
+fn set_file_readonly(_path: &Path, _readonly: bool) {}
+
+#[cfg(windows)]
 fn set_file_readonly(path: &Path, readonly: bool) {
+    use std::os::windows::ffi::OsStrExt as _;
+
+    use windows::Win32::Storage::FileSystem::{FILE_FLAGS_AND_ATTRIBUTES, INVALID_FILE_ATTRIBUTES};
+
     unsafe {
         use windows::core::PCWSTR;
         use windows::Win32::Storage::FileSystem::{
@@ -408,7 +413,15 @@ async fn install_program(src_program: &Path, target: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(windows))]
+fn install_auto_start(_program: &Path) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(windows)]
 fn install_auto_start(program: &Path) -> Result<()> {
+    use windows_registry::{CURRENT_USER, HSTRING};
+
     let mut command = quote_path(program.as_os_str());
     command.push(" service");
     info!("正在安装自启动，命令：{}", command.to_string_lossy());
@@ -425,7 +438,16 @@ fn install_auto_start(program: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(windows))]
 fn uninstall_auto_start() -> Result<()> {
+    Ok(())
+}
+
+#[cfg(windows)]
+fn uninstall_auto_start() -> Result<()> {
+    use windows::{core::HRESULT, Win32::Foundation::ERROR_FILE_NOT_FOUND};
+    use windows_registry::CURRENT_USER;
+
     let key = match CURRENT_USER.create("Software\\Microsoft\\Windows\\CurrentVersion\\Run") {
         Ok(key) => key,
         Err(e) if e.code() == HRESULT::from_win32(ERROR_FILE_NOT_FOUND.0) => {

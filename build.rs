@@ -1,7 +1,11 @@
-use std::time::SystemTime;
-use winres::WindowsResource;
+#[cfg(not(windows))]
+fn main() {}
 
+#[cfg(windows)]
 fn main() {
+    use std::time::SystemTime;
+    use winres::WindowsResource;
+
     // Get git commit hash
     let output = std::process::Command::new("git")
         .args(["rev-parse", "HEAD"])
