@@ -316,7 +316,7 @@ async fn save_access_token(token: Token) -> Result<()> {
 
 async fn reset_machine_id(machine_id: &str) -> Result<()> {
     let cursor_dir = get_cursor_installed_dir()?;
-    let storage_path = cursor_dir.join(r"User\globalStorage\storage.json");
+    let storage_path = cursor_dir.join(r"User/globalStorage/storage.json");
 
     // Remove read-only attribute if it exists
     if !storage_path.exists() {
@@ -640,7 +640,16 @@ fn scan_cursor_processes() -> Result<Vec<u32>> {
     let processes = sys.processes();
     let cursor_processes = processes
         .iter()
-        .filter(|(_, process)| process.name().eq_ignore_ascii_case("Cursor.exe"))
+        .filter(|(_, process)| {
+            #[cfg(windows)]
+            {
+                process.name().eq_ignore_ascii_case("Cursor.exe")
+            }
+            #[cfg(not(windows))]
+            {
+                process.name().eq_ignore_ascii_case("Cursor")
+            }
+        })
         .map(|(pid, _)| pid.as_u32())
         .collect();
     Ok(cursor_processes)
