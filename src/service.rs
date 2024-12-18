@@ -441,6 +441,14 @@ fn install_auto_start(program: &Path) -> Result<()> {
     }
 
     let plist_path = launch_agents_dir.join("dev.freeai.free-cursor-client.plist");
+    if plist_path.exists() {
+        info!("正在卸载自启动");
+        let _ = Command::new("launchctl")
+            .args(["unload", "-w"])
+            .arg(&plist_path)
+            .output();
+    }
+
     let program_path = program.to_string_lossy();
     let plist_content = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
