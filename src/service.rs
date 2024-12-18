@@ -368,7 +368,6 @@ async fn install_program(src_program: &Path, target: &Path) -> Result<()> {
 
     #[cfg(not(windows))]
     {
-        use std::os::unix::fs::OpenOptionsExt;
         // First read the content
         let content = tokio::fs::read(src_program).await?;
 
@@ -404,7 +403,7 @@ async fn install_program(src_program: &Path, target: &Path) -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn install_auto_start(_program: &Path) -> Result<()> {
     Ok(())
 }
@@ -425,11 +424,63 @@ fn install_auto_start(program: &Path) -> Result<()> {
         .context("SetRegValue")?;
 
     info!("已安装自启动");
-
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn install_auto_start(program: &Path) -> Result<()> {
+    use std::fs;
+    use std::io::Write;
+
+    let home_dir = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取用户主目录"))?;
+    let launch_agents_dir = home_dir.join("Library/LaunchAgents");
+    if !launch_agents_dir.exists() {
+        info!(
+            "正在创建 LaunchAgents 目录：{}",
+            launch_agents_dir.display()
+        );
+        fs::create_dir_all(&launch_agents_dir)?;
+    }
+
+    let plist_path = launch_agents_dir.join("dev.freeai.free-cursor-client.plist");
+    let program_path = program.to_string_lossy();
+    let plist_content = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.freeai.free-cursor-client</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{}</string>
+        <string>service</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>"#,
+        program_path
+    );
+
+    info!("正在创建 plist 文件：{}", plist_path.display());
+    let mut file = fs::File::create(&plist_path)?;
+    file.write_all(plist_content.as_bytes())?;
+
+    // Load the launch agent
+    info!("正在加载自启动");
+    Command::new("launchctl")
+        .args(["load", "-w"])
+        .arg(&plist_path)
+        .output()?;
+
+    info!("已安装自启动");
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn uninstall_auto_start() -> Result<()> {
     Ok(())
 }
@@ -462,7 +513,31 @@ fn uninstall_auto_start() -> Result<()> {
         }
     }
 
-    info!("已���载自启动");
+    info!("已卸载自启动");
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn uninstall_auto_start() -> Result<()> {
+    use std::fs;
+
+    let home_dir = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取用户主目录"))?;
+    let plist_path = home_dir.join("Library/LaunchAgents/dev.freeai.free-cursor-client.plist");
+
+    if plist_path.exists() {
+        // Unload the launch agent first
+        info!("正在卸载自启动");
+        Command::new("launchctl")
+            .args(["unload", "-w"])
+            .arg(&plist_path)
+            .output()?;
+
+        // Then remove the plist file
+        info!("正在删除 plist 文件：{}", plist_path.display());
+        fs::remove_file(&plist_path)?;
+    }
+
+    info!("已卸载自启动");
     Ok(())
 }
 
@@ -586,7 +661,7 @@ fn wait_cursor_processes(interactive: bool) -> Result<()> {
         if processes.is_empty() {
             return Ok(());
         }
-        if !tips {
+        if interactive && !tips {
             info!("发现正在运行的 Cursor 进程：");
             for p in processes {
                 info!("  进程 ID：{}", p);
@@ -594,7 +669,8 @@ fn wait_cursor_processes(interactive: bool) -> Result<()> {
             info!("请在继续之前关闭所有 Cursor 进程...");
             tips = true;
         }
-        std::thread::sleep(Duration::from_millis(300));
+        let wait_time = if interactive { 300 } else { 5 * 60 * 1000 };
+        std::thread::sleep(Duration::from_millis(wait_time));
     }
 }
 
