@@ -89,8 +89,12 @@ pub fn get_program_path() -> Result<PathBuf> {
 
 pub fn get_program_path_with_version(version: &str) -> Result<PathBuf> {
     let project_dirs = get_project_dirs()?;
+    #[cfg(windows)]
+    let program_name = "free-cursor-client.exe";
+    #[cfg(not(windows))]
+    let program_name = "free-cursor-client";
     Ok(project_dirs
         .data_local_dir()
         .join(version)
-        .join("free-cursor-client.exe"))
+        .join(program_name))
 }

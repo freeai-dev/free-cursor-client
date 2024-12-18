@@ -397,18 +397,43 @@ async fn install_program(src_program: &Path, target: &Path) -> Result<()> {
     if !parent.exists() {
         std::fs::create_dir_all(parent)?;
     }
+
     info!("正在复制程序到 {}", target.display());
-    let mut content = tokio::fs::read(src_program).await?;
-    let e_lfanew = content
-        .get(0x3c..0x3c + 2)
-        .ok_or_else(|| anyhow::anyhow!("Failed to get e_lfanew"))?;
-    let e_lfanew = u16::from_le_bytes(e_lfanew.try_into()?);
-    let subsystem_offset = e_lfanew + 0x18 + 68;
-    let subsystem = content
-        .get_mut(subsystem_offset as usize)
-        .ok_or_else(|| anyhow::anyhow!("Failed to get subsystem"))?;
-    *subsystem = 2;
-    tokio::fs::write(target, content).await?;
+
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // First read the content
+        let content = tokio::fs::read(src_program).await?;
+
+        // Write using tokio with proper permissions
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o755) // Set executable permissions
+            .open(target)
+            .await?;
+
+        tokio::io::AsyncWriteExt::write_all(&mut file, &content).await?;
+    }
+
+    #[cfg(windows)]
+    {
+        // Original Windows-specific code for PE file modification
+        let mut content = tokio::fs::read(src_program).await?;
+        let e_lfanew = content
+            .get(0x3c..0x3c + 2)
+            .ok_or_else(|| anyhow::anyhow!("Failed to get e_lfanew"))?;
+        let e_lfanew = u16::from_le_bytes(e_lfanew.try_into()?);
+        let subsystem_offset = e_lfanew + 0x18 + 68;
+        let subsystem = content
+            .get_mut(subsystem_offset as usize)
+            .ok_or_else(|| anyhow::anyhow!("Failed to get subsystem"))?;
+        *subsystem = 2;
+        tokio::fs::write(target, content).await?;
+    }
+
     info!("复制完成");
     Ok(())
 }
@@ -451,7 +476,7 @@ fn uninstall_auto_start() -> Result<()> {
     let key = match CURRENT_USER.create("Software\\Microsoft\\Windows\\CurrentVersion\\Run") {
         Ok(key) => key,
         Err(e) if e.code() == HRESULT::from_win32(ERROR_FILE_NOT_FOUND.0) => {
-            info!("注册表键未找到");
+            info!("注册表键未到");
             return Ok(());
         }
         Err(e) => {
@@ -471,7 +496,7 @@ fn uninstall_auto_start() -> Result<()> {
         }
     }
 
-    info!("已卸载自启动");
+    info!("已���载自启动");
     Ok(())
 }
 
@@ -494,7 +519,7 @@ fn stop_service() -> Result<()> {
                 .to_string_lossy()
                 .into_owned();
             if name.starts_with("free-cursor-client") {
-                info!("正在停止进程：{}", pid.as_u32());
+                info!("正在停止程：{}", pid.as_u32());
                 process.kill();
                 terminated_processes.push(process);
             }
@@ -540,7 +565,7 @@ fn wait_cursor_processes(interactive: bool) -> Result<()> {
         if interactive && !tips {
             info!("发现正在运行的 Cursor 进程：");
             for pid in &processes {
-                info!("  进程 ID：{}", pid);
+                info!("  程 ID：{}", pid);
             }
             info!("请在继续之前关闭所有 Cursor 进程...");
             tips = true;
