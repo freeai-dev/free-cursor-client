@@ -70,8 +70,6 @@ pub async fn do_install(token: String, src_program: &Path, dst_program: &Path) -
         .arg("service")
         .creation_flags(windows::Win32::System::Threading::DETACHED_PROCESS.0)
         .spawn()?;
-    #[cfg(not(windows))]
-    Command::new(dst_program).arg("service").spawn()?;
 
     info!("安装完成，Token: {}", token);
 
