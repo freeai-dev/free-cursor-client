@@ -55,8 +55,11 @@ pub async fn do_install(token: String, src_program: &Path, dst_program: &Path) -
     info!("正在等待 Cursor 进程结束");
     wait_cursor_processes(true)?;
 
-    info!("正在停止已安装的服务");
-    stop_service()?;
+    #[cfg(not(target_os = "macos"))]
+    {
+        info!("正在停止已安装的服务");
+        stop_service()?;
+    }
 
     info!("正在安装程序");
     install_program(&src_program, &dst_program).await?;
@@ -65,13 +68,82 @@ pub async fn do_install(token: String, src_program: &Path, dst_program: &Path) -
     install_auto_start(&dst_program)?;
 
     info!("正在启动服务");
+    start_service(&dst_program)?;
+
+    info!("安装完成，Token: {}", token);
+
+    Ok(())
+}
+
+pub fn start_service(_program: &Path) -> Result<()> {
     #[cfg(windows)]
-    Command::new(dst_program)
+    Command::new(_program)
         .arg("service")
         .creation_flags(windows::Win32::System::Threading::DETACHED_PROCESS.0)
         .spawn()?;
 
-    info!("安装完成，Token: {}", token);
+    #[cfg(target_os = "macos")]
+    {
+        // Check if service is already running
+        let output = Command::new("launchctl")
+            .args(["list", "dev.freeai.free-cursor-client"])
+            .output()?;
+
+        let current_pid = std::process::id();
+
+        if output.status.success() {
+            // Parse PID from launchctl output
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            if let Some(pid_str) = output_str
+                .lines()
+                .find(|line| line.trim().starts_with("\"PID\""))
+            {
+                info!("服务进程: {}", pid_str);
+                if let Some(pid) = pid_str
+                    .split('=')
+                    .skip(1)
+                    .next()
+                    .and_then(|s| s.trim().trim_end_matches(';').trim().parse::<u32>().ok())
+                {
+                    if pid != current_pid {
+                        // Different process running, need to restart
+                        info!("发现其他服务进程 (PID: {})，正在重启服务", pid);
+                        let _ = Command::new("launchctl")
+                            .args(["unload", "-w"])
+                            .arg(format!(
+                                "{}/Library/LaunchAgents/dev.freeai.free-cursor-client.plist",
+                                dirs::home_dir().unwrap().display()
+                            ))
+                            .output();
+
+                        Command::new("launchctl")
+                            .args(["load", "-w"])
+                            .arg(format!(
+                                "{}/Library/LaunchAgents/dev.freeai.free-cursor-client.plist",
+                                dirs::home_dir().unwrap().display()
+                            ))
+                            .output()?;
+                    } else {
+                        info!("当前进程已是运行中的服务 (PID: {})", pid);
+                    }
+                } else {
+                    info!("未找到服务进程: {}", output_str);
+                }
+            } else {
+                info!("未找到服务进程: {}", output_str);
+            }
+        } else {
+            // Service not found, just load it
+            info!("正在启动服务");
+            Command::new("launchctl")
+                .args(["load", "-w"])
+                .arg(format!(
+                    "{}/Library/LaunchAgents/dev.freeai.free-cursor-client.plist",
+                    dirs::home_dir().unwrap().display()
+                ))
+                .output()?;
+        }
+    }
 
     Ok(())
 }
@@ -430,6 +502,19 @@ fn install_auto_start(program: &Path) -> Result<()> {
     use std::fs;
     use std::io::Write;
 
+    use crate::config::get_program_symlink_path;
+
+    let program_symlink_path = get_program_symlink_path()?;
+    if program_symlink_path.exists() {
+        info!(
+            "正在删除已存在的符号链接：{}",
+            program_symlink_path.display()
+        );
+        std::fs::remove_file(&program_symlink_path)?;
+    }
+    info!("正在创建符号链接：{}", program_symlink_path.display());
+    std::os::unix::fs::symlink(program, &program_symlink_path)?;
+
     let home_dir = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取用户主目录"))?;
     let launch_agents_dir = home_dir.join("Library/LaunchAgents");
     if !launch_agents_dir.exists() {
@@ -441,15 +526,6 @@ fn install_auto_start(program: &Path) -> Result<()> {
     }
 
     let plist_path = launch_agents_dir.join("dev.freeai.free-cursor-client.plist");
-    if plist_path.exists() {
-        info!("正在卸载自启动");
-        let _ = Command::new("launchctl")
-            .args(["unload", "-w"])
-            .arg(&plist_path)
-            .output();
-    }
-
-    let program_path = program.to_string_lossy();
     let plist_content = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -468,19 +544,12 @@ fn install_auto_start(program: &Path) -> Result<()> {
     <true/>
 </dict>
 </plist>"#,
-        program_path
+        program_symlink_path.display()
     );
 
     info!("正在创建 plist 文件：{}", plist_path.display());
     let mut file = fs::File::create(&plist_path)?;
     file.write_all(plist_content.as_bytes())?;
-
-    // Load the launch agent
-    info!("正在加载自启动");
-    Command::new("launchctl")
-        .args(["load", "-w"])
-        .arg(&plist_path)
-        .output()?;
 
     info!("已安装自启动");
     Ok(())

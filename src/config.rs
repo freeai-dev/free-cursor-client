@@ -87,6 +87,12 @@ pub fn get_program_path() -> Result<PathBuf> {
     get_program_path_with_version(env!("CARGO_PKG_VERSION"))
 }
 
+#[cfg(unix)]
+pub fn get_program_symlink_path() -> Result<PathBuf> {
+    let project_dirs = get_project_dirs()?;
+    Ok(project_dirs.data_local_dir().join("free-cursor-client"))
+}
+
 pub fn get_program_path_with_version(version: &str) -> Result<PathBuf> {
     let project_dirs = get_project_dirs()?;
     #[cfg(windows)]
