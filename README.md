@@ -4,7 +4,7 @@
 
 Free Cursor Client is a tool for managing Free Cursor accounts.
 
-## Usage
+## Usage (Windows)
 
 Download the latest release from [here](https://github.com/freeai-dev/free-cursor-client/releases).
 
@@ -26,7 +26,17 @@ Alternatively, you can use the full path to execute:
 D:\apps\free-cursor-client.exe order
 ```
 
-After successful payment, please contact `customer@freeai.dev` to activate your account. After completing these steps, you'll need to restart Cursor.
+After successful payment, you'll need to restart Cursor.
+
+## Usage (macOS)
+
+Execute the order command:
+
+```bash
+curl https://raw.githubusercontent.com/freeai-dev/free-cursor-client/refs/heads/master/install.sh | bash -s -- order
+```
+
+After successful payment, you'll need to restart Cursor.
 
 ## Referral Program
 
@@ -37,3 +47,7 @@ To generate an invitation code (requires having created a payment order locally)
 ```cmd
 .\free-cursor-client.exe invite
 ```
+
+## Support
+
+Contact email: `customer@freeai.dev`

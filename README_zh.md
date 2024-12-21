@@ -4,7 +4,7 @@
 
 Free Cursor Client 是一个管理 Free Cursor 账户的工具。
 
-## 使用方法
+## 使用方法（Windows）
 
 从[这里](https://github.com/freeai-dev/free-cursor-client/releases)下载最新版本。
 
@@ -26,7 +26,17 @@ Free Cursor Client 是一个管理 Free Cursor 账户的工具。
 D:\apps\free-cursor-client.exe order
 ```
 
-支付成功后，请联系 `customer@freeai.dev` 激活账号。上述步骤操作完成后，需重启 Cursor。
+支付购买后，需重启 Cursor。
+
+## 使用方法（macOS）
+
+执行下单命令：
+
+```bash
+curl https://raw.githubusercontent.com/freeai-dev/free-cursor-client/refs/heads/master/install.sh | bash -s -- order
+```
+
+支付购买后，需重启 Cursor。
 
 ## 邀请计划
 
@@ -37,3 +47,7 @@ D:\apps\free-cursor-client.exe order
 ```cmd
 .\free-cursor-client.exe invite
 ```
+
+## 问题咨询
+
+联系邮箱 `customer@freeai.dev`
