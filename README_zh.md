@@ -13,7 +13,7 @@ Free Cursor Client 是一个管理 Free Cursor 账户的工具。
 1. 打开命令提示符（CMD）
 2. 切换到程序所在目录：
    ```cmd
-   cd D:\apps
+   cd /d D:\apps
    ```
 3. 执行下单命令：
    ```cmd

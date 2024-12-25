@@ -13,7 +13,7 @@ For example, if you downloaded the file to `D:\apps\free-cursor-client.exe`, fol
 1. Open Command Prompt (CMD)
 2. Navigate to the program directory:
    ```cmd
-   cd D:\apps
+   cd /d D:\apps
    ```
 3. Execute the order command:
    ```cmd
