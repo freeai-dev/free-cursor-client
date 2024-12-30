@@ -12,10 +12,13 @@ Free Cursor Client 是一个管理 Free Cursor 账户的工具。
 
 1. 打开命令提示符（CMD）
 2. 切换到程序所在目录：
+
    ```cmd
    cd /d D:\apps
    ```
+
 3. 执行下单命令：
+
    ```cmd
    .\free-cursor-client.exe order
    ```
@@ -33,7 +36,7 @@ D:\apps\free-cursor-client.exe order
 执行下单命令：
 
 ```bash
-curl https://raw.githubusercontent.com/freeai-dev/free-cursor-client/refs/heads/master/install.sh | bash -s -- order
+bash <(curl -L https://raw.githubusercontent.com/freeai-dev/free-cursor-client/refs/heads/main/install.sh) order
 ```
 
 支付购买后，需重启 Cursor。

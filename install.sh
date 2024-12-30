@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 APP_SUPPORT_DIR="$HOME/Library/Application Support"
 BASE_DIR="$APP_SUPPORT_DIR/dev.freeai.free-cursor-client"
 BINARY_NAME="free-cursor-client"

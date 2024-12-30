@@ -12,10 +12,13 @@ For example, if you downloaded the file to `D:\apps\free-cursor-client.exe`, fol
 
 1. Open Command Prompt (CMD)
 2. Navigate to the program directory:
+
    ```cmd
    cd /d D:\apps
    ```
+
 3. Execute the order command:
+
    ```cmd
    .\free-cursor-client.exe order
    ```
@@ -33,7 +36,7 @@ After successful payment, you'll need to restart Cursor.
 Execute the order command:
 
 ```bash
-curl https://raw.githubusercontent.com/freeai-dev/free-cursor-client/refs/heads/master/install.sh | bash -s -- order
+bash <(curl -L https://raw.githubusercontent.com/freeai-dev/free-cursor-client/refs/heads/main/install.sh) order
 ```
 
 After successful payment, you'll need to restart Cursor.
