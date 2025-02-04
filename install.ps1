@@ -1,31 +1,31 @@
-﻿# PowerShell installation script for Free Cursor Client
+# PowerShell installation script for Free Cursor Client
 
 $Repo = "freeai-dev/free-cursor-client"
 
 # Get latest version from GitHub
-Write-Host "正在获取最新版本信息..."
+Write-Host "Fetching latest version..."
 try {
     $LatestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
     $Version = $LatestRelease.tag_name -replace '^v'
-    Write-Host "最新版本：$Version"
+    Write-Host "Latest version: $Version"
 }
 catch {
-    Write-Host "从 GitHub 获取发布信息失败"
+    Write-Host "Failed to fetch release information from GitHub"
     exit 1
 }
 
 $DownloadUrl = "https://github.com/$Repo/releases/download/v$Version/free-cursor-client.exe"
 
 # Download and run the program
-Write-Host "正在下载最新版本..."
+Write-Host "Downloading latest version..."
 $TempFile = Join-Path $env:TEMP ([System.IO.Path]::GetRandomFileName() + ".exe")
 try {
     Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempFile
-    Write-Host "下载完成，正在启动程序..."
+    Write-Host "Download complete, launching program..."
     & $TempFile $args
 }
 catch {
-    Write-Host "下载或运行程序失败"
+    Write-Host "Failed to download or run program"
     exit 1
 }
 finally {
