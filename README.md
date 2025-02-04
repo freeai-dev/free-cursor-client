@@ -9,7 +9,7 @@ Free Cursor Client is a tool for managing Free Cursor accounts.
 Option 1: Using PowerShell installer (Recommended)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; iwr -Uri 'https://raw.githubusercontent.com/freeai-dev/free-cursor-client/main/install.ps1' -UseBasicParsing | iex"
+powershell -ExecutionPolicy Bypass -Command "Invoke-Command -ScriptBlock ([scriptblock]::Create((iwr -Uri 'https://raw.githubusercontent.com/freeai-dev/free-cursor-client/main/install.ps1' -UseBasicParsing).Content)) -ArgumentList 'order'"
 ```
 
 Option 2: Manual installation
@@ -38,6 +38,18 @@ D:\apps\free-cursor-client.exe order
 ```
 
 After successful payment, you'll need to restart Cursor.
+
+If you have already paid but the command line window was accidentally closed, you can recover the installation using the following command:
+
+Option 1: Using PowerShell installer
+```powershell
+powershell -ExecutionPolicy Bypass -Command "Invoke-Command -ScriptBlock ([scriptblock]::Create((iwr -Uri 'https://raw.githubusercontent.com/freeai-dev/free-cursor-client/main/install.ps1' -UseBasicParsing).Content)) -ArgumentList 'install'"
+```
+
+Option 2: Manual installation
+```cmd
+D:\apps\free-cursor-client.exe install
+```
 
 ## Usage (macOS)
 
