@@ -1,4 +1,4 @@
-# PowerShell installation script for Free Cursor Client
+﻿# PowerShell installation script for Free Cursor Client
 
 $Repo = "freeai-dev/free-cursor-client"
 
