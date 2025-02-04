@@ -6,6 +6,14 @@ Free Cursor Client 是一个管理 Free Cursor 账户的工具。
 
 ## 使用方法（Windows）
 
+方式一：使用 PowerShell 安装程序（推荐）
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; iwr -Uri 'https://raw.githubusercontent.com/freeai-dev/free-cursor-client/main/install.ps1' -UseBasicParsing | iex"
+```
+
+方式二：手动安装
+
 从[这里](https://github.com/freeai-dev/free-cursor-client/releases)下载最新版本。
 
 假设您下载的文件保存在 `D:\apps\free-cursor-client.exe`，请按以下步骤操作：
