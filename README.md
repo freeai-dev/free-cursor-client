@@ -9,7 +9,7 @@ Free Cursor Client is a tool for managing Free Cursor accounts.
 Option 1: Using PowerShell installer (Recommended)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "Invoke-Command -ScriptBlock ([scriptblock]::Create((iwr -Uri 'https://raw.githubusercontent.com/freeai-dev/free-cursor-client/main/install.ps1' -UseBasicParsing).Content)) -ArgumentList 'order'"
+powershell -ExecutionPolicy Bypass -Command "Invoke-Command -ScriptBlock ([scriptblock]::Create((irm 'https://cursor.freeai.dev/install.ps1'))) -ArgumentList 'order'"
 ```
 
 Option 2: Manual installation
@@ -42,11 +42,13 @@ After successful payment, you'll need to restart Cursor.
 If you have already paid but the command line window was accidentally closed, you can recover the installation using the following command:
 
 Option 1: Using PowerShell installer
+
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "Invoke-Command -ScriptBlock ([scriptblock]::Create((iwr -Uri 'https://raw.githubusercontent.com/freeai-dev/free-cursor-client/main/install.ps1' -UseBasicParsing).Content)) -ArgumentList 'install'"
+powershell -ExecutionPolicy Bypass -Command "Invoke-Command -ScriptBlock ([scriptblock]::Create((irm 'https://cursor.freeai.dev/install.ps1'))) -ArgumentList 'install'"
 ```
 
 Option 2: Manual installation
+
 ```cmd
 D:\apps\free-cursor-client.exe install
 ```
@@ -56,7 +58,7 @@ D:\apps\free-cursor-client.exe install
 Execute the order command:
 
 ```bash
-bash <(curl -L https://raw.githubusercontent.com/freeai-dev/free-cursor-client/refs/heads/main/install.sh) order
+bash <(curl -L https://cursor.freeai.dev/install.sh) order
 ```
 
 After successful payment, you'll need to restart Cursor.

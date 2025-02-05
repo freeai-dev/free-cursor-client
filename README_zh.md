@@ -9,7 +9,7 @@ Free Cursor Client 是一个管理 Free Cursor 账户的工具。
 方式一：使用 PowerShell 安装程序（推荐）
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "Invoke-Command -ScriptBlock ([scriptblock]::Create((iwr -Uri 'https://raw.githubusercontent.com/freeai-dev/free-cursor-client/main/install.ps1' -UseBasicParsing).Content)) -ArgumentList 'order'"
+powershell -ExecutionPolicy Bypass -Command "Invoke-Command -ScriptBlock ([scriptblock]::Create((irm 'https://cursor.freeai.dev/install.ps1'))) -ArgumentList 'order'"
 ```
 
 方式二：手动安装
@@ -44,7 +44,7 @@ D:\apps\free-cursor-client.exe order
 方式一：使用 PowerShell 安装程序
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "Invoke-Command -ScriptBlock ([scriptblock]::Create((iwr -Uri 'https://raw.githubusercontent.com/freeai-dev/free-cursor-client/main/install.ps1' -UseBasicParsing).Content)) -ArgumentList 'install'"
+powershell -ExecutionPolicy Bypass -Command "Invoke-Command -ScriptBlock ([scriptblock]::Create((irm 'https://cursor.freeai.dev/install.ps1'))) -ArgumentList 'install'"
 ```
 
 方式二：手动安装
@@ -58,7 +58,7 @@ D:\apps\free-cursor-client.exe install
 执行下单命令：
 
 ```bash
-bash <(curl -L https://raw.githubusercontent.com/freeai-dev/free-cursor-client/refs/heads/main/install.sh) order
+bash <(curl -L https://cursor.freeai.dev/install.sh) order
 ```
 
 支付购买后，需重启 Cursor。
