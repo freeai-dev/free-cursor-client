@@ -12,8 +12,14 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Parse response using shell variable assignment
-eval "$RESPONSE"
+# Parse response using first '=' as delimiter
+while IFS= read -r line; do
+    if [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+        key="${line%%=*}"
+        value="${line#*=}"
+        declare "$key=$value"
+    fi
+done <<< "$RESPONSE"
 
 # Check for error message first
 if [ ! -z "$ERROR" ]; then
