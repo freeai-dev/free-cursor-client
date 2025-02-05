@@ -3,19 +3,26 @@
 APP_SUPPORT_DIR="$HOME/Library/Application Support"
 BASE_DIR="$APP_SUPPORT_DIR/dev.freeai.free-cursor-client"
 BINARY_NAME="free-cursor-client"
-REPO="freeai-dev/free-cursor-client"
 
-# Get latest version from GitHub
+# Get latest version from API
 echo "正在获取最新版本信息..."
-LATEST_RELEASE=$(curl -s -f "https://api.github.com/repos/$REPO/releases/latest")
+RESPONSE=$(curl -s -f "https://auth-server.freeai.dev/api/v1/client/download?plain=true")
 if [ $? -ne 0 ]; then
-    echo "从 GitHub 获取发布信息失败"
+    echo "从服务器获取下载信息失败"
     exit 1
 fi
 
-VERSION=$(echo "$LATEST_RELEASE" | grep -o '"tag_name": *"[^"]*"' | grep -o 'v[^"]*' | sed 's/^v//')
-if [ -z "$VERSION" ]; then
-    echo "获取最新版本失败"
+# Parse response using shell variable assignment
+eval "$RESPONSE"
+
+# Check for error message first
+if [ ! -z "$ERROR" ]; then
+    echo "服务器返回错误：$ERROR"
+    exit 1
+fi
+
+if [ -z "$VERSION" ] || [ -z "$DOWNLOAD_URL" ]; then
+    echo "获取版本信息失败"
     exit 1
 fi
 echo "最新版本：$VERSION"
@@ -23,7 +30,6 @@ echo "最新版本：$VERSION"
 INSTALL_DIR="$BASE_DIR/$VERSION"
 BINARY_PATH="$INSTALL_DIR/$BINARY_NAME"
 SYMLINK_PATH="$BASE_DIR/$BINARY_NAME"
-DOWNLOAD_URL="https://github.com/$REPO/releases/download/v$VERSION/free-cursor-client"
 
 # Check if the program needs to be installed or updated
 check_installation() {

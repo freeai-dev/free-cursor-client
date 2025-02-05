@@ -1,20 +1,17 @@
 # PowerShell installation script for Free Cursor Client
 
-$Repo = "freeai-dev/free-cursor-client"
-
-# Get latest version from GitHub
+# Get latest version from API
 Write-Host "Fetching latest version..."
 try {
-    $LatestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
-    $Version = $LatestRelease.tag_name -replace '^v'
+    $Response = Invoke-RestMethod -Uri "https://auth-server.freeai.dev/api/v1/client/download"
+    $Version = $Response.version
+    $DownloadUrl = $Response.downloadUrl
     Write-Host "Latest version: $Version"
 }
 catch {
-    Write-Host "Failed to fetch release information from GitHub"
+    Write-Host "Failed to fetch download information from server"
     exit 1
 }
-
-$DownloadUrl = "https://github.com/$Repo/releases/download/v$Version/free-cursor-client.exe"
 
 # Download and run the program
 Write-Host "Downloading latest version..."
